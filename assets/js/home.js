@@ -344,7 +344,16 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       trainingDetailTitle: "培訓內容",
       trainingDetailPhase: "Phase 1 · 自由練習",
       trainingDetailEngine: "規則引擎",
-      trainingDetailShoe: "8 副牌 Shoe"
+      trainingDetailShoe: "8 副牌 Shoe",
+      menuITAgent: "IT Agent",
+      itAgentTitle: "IT Agent 管理工具",
+      itAgentBadge: "Internal",
+      itAgentBody: "部署到員工 Windows 電腦後，IT Admin 可遠端截圖、管理流程、傳送通知、控制印表機。",
+      itAgentDownload: "下載安裝程式",
+      itAgentStep1: "1. 下載 install.bat 到員工電腦",
+      itAgentStep2: "2. 以系統管理員執行",
+      itAgentStep3: "3. 安裝完成後自動連接 Dashboard",
+      itAgentNote: "注意：需要管理員權限。安裝後自動隨 Windows 啟動。"
     },
     vi: {
       detailEyebrow: "LIVE PANEL",
@@ -446,7 +455,16 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       trainingDetailTitle: "Nội dung đào tạo",
       trainingDetailPhase: "Phase 1 · Luyện tập tự do",
       trainingDetailEngine: "Rule engine",
-      trainingDetailShoe: "Shoe 8 bộ bài"
+      trainingDetailShoe: "Shoe 8 bộ bài",
+      menuITAgent: "IT Agent",
+      itAgentTitle: "Công cụ quản lý IT Agent",
+      itAgentBadge: "Internal",
+      itAgentBody: "Cài lên máy Windows của nhân viên để IT Admin có thể chụp màn hình, quản lý tiến trình, gửi thông báo và điều khiển máy in từ xa.",
+      itAgentDownload: "Tải bộ cài đặt",
+      itAgentStep1: "1. Tải install.bat về máy nhân viên",
+      itAgentStep2: "2. Chạy với quyền Administrator",
+      itAgentStep3: "3. Sau khi cài xong, máy tự kết nối Dashboard",
+      itAgentNote: "Lưu ý: Cần quyền Admin. Agent tự khởi động cùng Windows."
     },
     en: {
       detailEyebrow: "LIVE PANEL",
@@ -548,7 +566,16 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       trainingDetailTitle: "Training Content",
       trainingDetailPhase: "Phase 1 · Free Practice",
       trainingDetailEngine: "Rule engine",
-      trainingDetailShoe: "8-deck shoe"
+      trainingDetailShoe: "8-deck shoe",
+      menuITAgent: "IT Agent",
+      itAgentTitle: "IT Agent Management",
+      itAgentBadge: "Internal",
+      itAgentBody: "Deploy to employee Windows machines so IT Admin can remotely take screenshots, manage processes, send notifications, and control printers.",
+      itAgentDownload: "Download Installer",
+      itAgentStep1: "1. Download install.bat to the employee machine",
+      itAgentStep2: "2. Run as Administrator",
+      itAgentStep3: "3. Agent connects to Dashboard automatically",
+      itAgentNote: "Note: Administrator rights required. Agent auto-starts with Windows."
     }
   };
 
@@ -684,7 +711,8 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     { id: "attendance", labelKey: "menuAttendance", icon: "⏱", adminOnly: true },
     { id: "salary", labelKey: "menuSalary", icon: "₫", adminOnly: true },
     { id: "yidingInfo", labelKey: "menuInfo", icon: "✦", adminOnly: true },
-    { id: "accounts", labelKey: "menuAccounts", icon: "🛡", adminOnly: true }
+    { id: "accounts", labelKey: "menuAccounts", icon: "🛡", adminOnly: true },
+    { id: "itAgent", labelKey: "menuITAgent", icon: "🖥", adminOnly: true }
   ];
 
   const topActionIcons = [
@@ -1172,6 +1200,26 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       return;
     }
 
+    if (uiState.activeTab === "itAgent") {
+      chatTitle.textContent = t("itAgentTitle");
+      chatBadge.textContent = t("itAgentBadge");
+      chatBody.innerHTML = [
+        '<div class="dashboard-chat-stack">',
+        '<section class="dashboard-chat-surface">',
+        '<h3 class="dashboard-chat-surface__title">' + escapeHtml(t("itAgentTitle")) + "</h3>",
+        '<p class="dashboard-chat-surface__body">' + escapeHtml(t("itAgentBody")) + "</p>",
+        '<div class="dashboard-chat-chip-grid">',
+        renderChatChip("Windows", "10 / 11"),
+        renderChatChip("Auto-start", "✓"),
+        renderChatChip("Silent", "✓"),
+        "</div>",
+        '<a href="/downloads/install.bat" download class="dashboard-button dashboard-button--accent" style="display:inline-block;margin-top:12px;">' + escapeHtml(t("itAgentDownload")) + "</a>",
+        "</section>",
+        "</div>"
+      ].join("");
+      return;
+    }
+
     chatTitle.textContent = i18n.t("home.welcome");
     chatBadge.textContent = "Ready";
     chatBody.innerHTML = [
@@ -1250,6 +1298,24 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     if (uiState.activeTab === "accounts" && authStore.isAdmin(currentAccount)) {
       detailTitle.textContent = t("accountsTitle");
       detailBody.innerHTML = renderAccountsPanel();
+      return;
+    }
+
+    if (uiState.activeTab === "itAgent") {
+      detailTitle.textContent = t("itAgentTitle");
+      detailBody.innerHTML = [
+        '<section class="dashboard-surface-card">',
+        '<h3 class="dashboard-panel__title">' + escapeHtml(t("itAgentTitle")) + "</h3>",
+        '<div class="dashboard-detail-stack" style="margin-top:12px;">',
+        '<div class="dashboard-chat-chip-grid">',
+        renderChatChip(t("itAgentStep1"), ""),
+        renderChatChip(t("itAgentStep2"), ""),
+        renderChatChip(t("itAgentStep3"), ""),
+        "</div>",
+        '<p class="dashboard-readonly-note" style="margin-top:12px;">' + escapeHtml(t("itAgentNote")) + "</p>",
+        "</div>",
+        "</section>"
+      ].join("");
       return;
     }
 
