@@ -86,7 +86,7 @@ if %errorLevel% neq 0 (
 )
 
 echo  [4/5] Cai thu vien...
-"%INSTALL_DIR%\venv\Scripts\pip" install -q -r "%INSTALL_DIR%\requirements.txt"
+"%INSTALL_DIR%\venv\Scripts\pip" install -q websockets==14.1 psutil==6.1.1 mss==9.0.1 Pillow==11.0.0 opencv-python==4.13.0.92
 if %errorLevel% neq 0 (
     echo  [LOI] Cai thu vien that bai. Kiem tra ket noi internet.
     pause & exit /b 1
