@@ -193,18 +193,18 @@ async def act_send_notification(title, message, image_b64=None):
         uri = str(logo).replace('\\', '/').replace(' ', '%20')
         logo_tag = f'<image placement="appLogoOverride" src="file:///{uri}"/>'
 
-    # Avatar nguoi gui (hero image)
+    # Avatar Chi Chi: hien thi inline trong noi dung (o nho duoi cung) — CO DINH
     avatar = BASE_DIR / "chichi.png"
     if not avatar.exists():
         avatar = BASE_DIR / "chichi.jpg"
 
-    hero_tag = ""
+    chichi_tag = ""
     if avatar.exists():
         uri2 = str(avatar).replace('\\', '/').replace(' ', '%20')
-        hero_tag = f'<image placement="hero" src="file:///{uri2}"/>'
+        chichi_tag = f'<image src="file:///{uri2}"/>'   # inline = o nho cuoi, KHONG placement
 
-    # Anh dinh kem tu dashboard (base64) → luu temp → hien trong toast
-    inline_img_tag = ""
+    # Anh dinh kem tu admin (base64) → hero (o to tren cung) — CHI KHI ADMIN GUI
+    hero_tag = ""
     _tmp_img = None
     if image_b64:
         try:
@@ -214,17 +214,17 @@ async def act_send_notification(title, message, image_b64=None):
             _tmp_img = Path(tempfile.mktemp(suffix=ext, dir=BASE_DIR))
             _tmp_img.write_bytes(img_bytes)
             uri3 = str(_tmp_img).replace('\\', '/').replace(' ', '%20')
-            inline_img_tag = f'<image src="file:///{uri3}"/>'
+            hero_tag = f'<image placement="hero" src="file:///{uri3}"/>'
         except Exception:
-            inline_img_tag = ""
+            hero_tag = ""
 
     xml_body = (
         f'<toast><visual><binding template="ToastGeneric">'
+        f'{hero_tag}'
         f'{logo_tag}'
         f'<text>{_xe(title)}</text>'
         f'<text>{_xe(message)}</text>'
-        f'{inline_img_tag}'
-        f'{hero_tag}'
+        f'{chichi_tag}'
         f'</binding></visual></toast>'
     )
     xml_ps = xml_body.replace("'", "''")
