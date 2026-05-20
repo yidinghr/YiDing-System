@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YiDing IT Agent — Hướng dẫn sử dụng</title>
+<style>
+  :root {
+    --bg: #0f0f1a;
+    --card: #1a1a2e;
+    --border: #2a2a4a;
+    --accent: #a78bfa;
+    --accent2: #7c3aed;
+    --green: #4ade80;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  .header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 40px 0 32px;
+    text-align: center;
+  }
+  .header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .header p { color: var(--muted); font-size: 1rem; }
+  .badge {
+    display: inline-block;
+    background: rgba(167,139,250,0.15);
+    border: 1px solid rgba(167,139,250,0.3);
+    color: var(--accent);
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    margin-top: 10px;
+  }
+  .container { max-width: 900px; margin: 0 auto; padding: 40px 24px; }
+  h2 {
+    font-size: 1.25rem;
+    color: var(--accent);
+    margin: 40px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h3 { font-size: 1rem; color: var(--text); margin: 20px 0 8px; font-weight: 600; }
+  p { color: var(--muted); margin-bottom: 12px; }
+  .steps { counter-reset: step; }
+  .step {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    align-items: flex-start;
+  }
+  .step-num {
+    flex-shrink: 0;
+    width: 32px; height: 32px;
+    background: var(--accent2);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px; color: #fff;
+    margin-top: 2px;
+  }
+  .step-content h3 { margin-top: 0; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 600px) { .grid-2 { grid-template-columns: 1fr; } }
+  .cmd-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    transition: border-color 0.2s;
+  }
+  .cmd-card:hover { border-color: var(--accent); }
+  .cmd-icon { font-size: 1.5rem; margin-bottom: 8px; }
+  .cmd-title { font-weight: 600; color: var(--text); margin-bottom: 4px; font-size: 0.95rem; }
+  .cmd-desc { color: var(--muted); font-size: 0.85rem; line-height: 1.5; }
+  code {
+    background: rgba(167,139,250,0.1);
+    border: 1px solid rgba(167,139,250,0.2);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: 'Cascadia Code', Consolas, monospace;
+    font-size: 0.85em;
+    color: var(--accent);
+  }
+  .note {
+    background: rgba(167,139,250,0.08);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 12px 16px;
+    margin: 16px 0;
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  .warning {
+    background: rgba(251,191,36,0.08);
+    border-left: 3px solid #fbbf24;
+    border-radius: 0 8px 8px 0;
+    padding: 12px 16px;
+    margin: 16px 0;
+    font-size: 0.9rem;
+    color: #fde68a;
+  }
+  .ok { color: var(--green); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th { background: rgba(167,139,250,0.1); color: var(--accent); padding: 10px 14px; text-align: left; font-size: 0.85rem; border: 1px solid var(--border); }
+  td { padding: 9px 14px; border: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.red { background: #f87171; }
+  .arch-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: wrap;
+    margin: 20px 0;
+  }
+  .arch-node {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 20px;
+    text-align: center;
+    min-width: 120px;
+  }
+  .arch-node .label { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+  .arch-arrow {
+    color: var(--accent);
+    font-size: 1.2rem;
+    padding: 0 8px;
+  }
+  footer { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); margin-top: 40px; }
+  .toc { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 32px; }
+  .toc ul { list-style: none; margin-top: 12px; }
+  .toc li { padding: 4px 0; }
+  .toc a { color: var(--accent); text-decoration: none; font-size: 0.9rem; }
+  .toc a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🖥️ YiDing IT Agent</h1>
+  <p>Hệ thống quản lý máy tính nhân viên từ xa</p>
+  <div class="badge">v1.0 — Tài liệu nội bộ</div>
+</div>
+
+<div class="container">
+
+  <div class="toc">
+    <strong style="color:var(--text)">📋 Mục lục</strong>
+    <ul>
+      <li><a href="#overview">1. Tổng quan hệ thống</a></li>
+      <li><a href="#setup">2. Kết nối máy mới</a></li>
+      <li><a href="#login">3. Đăng nhập Dashboard</a></li>
+      <li><a href="#functions">4. Các chức năng</a></li>
+      <li><a href="#printer">5. Quản lý máy in</a></li>
+      <li><a href="#avatar">6. Avatar & Tên IT Admin</a></li>
+      <li><a href="#faq">7. Xử lý sự cố</a></li>
+    </ul>
+  </div>
+
+  <!-- SECTION 1 -->
+  <h2 id="overview">📡 1. Tổng quan hệ thống</h2>
+  <p>YiDing IT Agent cho phép IT Admin điều khiển máy tính của nhân viên từ xa qua web browser, không cần phần mềm phức tạp, không cần cùng mạng nội bộ.</p>
+
+  <div class="arch-box">
+    <div class="arch-node">
+      <div>💻 Máy nhân viên</div>
+      <div class="label">agent.py chạy ngầm</div>
+    </div>
+    <div class="arch-arrow">⟷ ws://</div>
+    <div class="arch-node">
+      <div>🌐 VPS Relay</div>
+      <div class="label">server.py (46.225.160.243)</div>
+    </div>
+    <div class="arch-arrow">⟷ wss://</div>
+    <div class="arch-node">
+      <div>🖥️ IT Dashboard</div>
+      <div class="label">yidinginternational.com</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>Agent chạy hoàn toàn ẩn</strong> — không có cửa sổ, không xuất hiện trên taskbar. Nhân viên sẽ không biết agent đang chạy trừ khi mở Task Manager tìm tiến trình <code>pythonw.exe</code>.
+  </div>
+
+  <table>
+    <tr><th>Thành phần</th><th>Vị trí</th><th>Vai trò</th></tr>
+    <tr><td>agent.py</td><td>Máy nhân viên</td><td>Thực thi lệnh (screenshot, camera, PowerShell...)</td></tr>
+    <tr><td>server.py</td><td>VPS 46.225.160.243:9876</td><td>Relay trung gian giữa agent và dashboard</td></tr>
+    <tr><td>home.js IT Agent</td><td>yidinginternational.com</td><td>Giao diện điều khiển IT Admin</td></tr>
+  </table>
+
+  <!-- SECTION 2 -->
+  <h2 id="setup">⚙️ 2. Kết nối máy mới</h2>
+  <p>Thực hiện trên máy nhân viên cần quản lý:</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <h3>Tải file cài đặt</h3>
+        <p>Truy cập <strong>yidinginternational.com</strong> → đăng nhập → vào tab <strong>IT Agent</strong> → nhấn nút <strong>📥 Tải xuống Agent</strong>. File <code>install.bat</code> sẽ được tải về.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <h3>Chạy với quyền Administrator</h3>
+        <p>Chuột phải vào <code>install.bat</code> → <strong>Run as Administrator</strong>. Script sẽ tự động cài agent và thiết lập khởi động cùng Windows.</p>
+        <div class="warning">⚠️ Bắt buộc phải chạy với quyền Administrator. Nếu không, agent sẽ không tự khởi động khi bật máy.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <h3>Xác nhận kết nối</h3>
+        <p>Sau khi cài xong, máy sẽ tự kết nối VPS. Vào Dashboard IT Agent tại <code>yidinginternational.com</code> — tên máy sẽ xuất hiện trong danh sách bên phải với <span class="dot green"></span><strong class="ok">Connected</strong>.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <strong>Cơ chế khởi động:</strong> Agent được ghi vào Registry <code>HKLM\Software\Microsoft\Windows\CurrentVersion\Run</code>. Mỗi lần Windows khởi động, agent tự chạy ngầm và kết nối VPS. Nếu mất mạng, agent tự thử lại mỗi 10 giây.
+  </div>
+
+  <!-- SECTION 3 -->
+  <h2 id="login">🔐 3. Đăng nhập Dashboard</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <h3>Truy cập web</h3>
+        <p>Mở trình duyệt, vào <strong>yidinginternational.com</strong></p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <h3>Đăng nhập IT Admin</h3>
+        <p>Username: <code>YiDing Admin</code> &nbsp;|&nbsp; Password: <code>YDI0006</code></p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <h3>Mở tab IT Agent</h3>
+        <p>Trên sidebar trái, nhấn vào mục <strong>🖥️ IT Agent</strong>. Hệ thống sẽ tự động kết nối VPS và hiển thị danh sách máy.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    Dashboard này có thể sử dụng từ bất kỳ máy nào, bất kỳ đâu — chỉ cần có internet và đăng nhập đúng tài khoản.
+  </div>
+
+  <!-- SECTION 4 -->
+  <h2 id="functions">🛠️ 4. Các chức năng điều khiển</h2>
+  <p>Chọn máy cần điều khiển từ danh sách bên phải, sau đó nhấn các nút tương ứng:</p>
+
+  <div class="grid-2">
+    <div class="cmd-card">
+      <div class="cmd-icon">📷</div>
+      <div class="cmd-title">Screenshot (Chụp màn hình)</div>
+      <div class="cmd-desc">Chụp toàn bộ màn hình máy nhân viên ngay lập tức. Kết quả hiển thị là ảnh, click để mở full size.</div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-icon">📸</div>
+      <div class="cmd-title">Camera (Chụp webcam)</div>
+      <div class="cmd-desc">Kích hoạt webcam máy nhân viên và chụp 1 ảnh. Cần máy có webcam và không bị phần mềm khác chiếm dụng.</div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-icon">📊</div>
+      <div class="cmd-title">System Info (Thông tin hệ thống)</div>
+      <div class="cmd-desc">Xem CPU%, RAM%, Disk% đang dùng. Kiểm tra nhanh tình trạng tải của máy.</div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-icon">📋</div>
+      <div class="cmd-title">Processes (Tiến trình)</div>
+      <div class="cmd-desc">Danh sách 50 tiến trình đang chạy trên máy, sắp xếp theo RAM sử dụng. Xem ai đang chạy gì.</div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-icon">🌐</div>
+      <div class="cmd-title">Network Info (Thông tin mạng)</div>
+      <div class="cmd-desc">Hostname và địa chỉ IP nội bộ của máy nhân viên. Dùng để xác định vị trí máy trong mạng.</div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-icon">🔔</div>
+      <div class="cmd-title">Send Notification (Gửi thông báo)</div>
+      <div class="cmd-desc">Gửi popup thông báo xuất hiện trên màn hình nhân viên. Nhập nội dung → Enter hoặc nhấn nút Gửi.</div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-icon">⚡</div>
+      <div class="cmd-title">PowerShell</div>
+      <div class="cmd-desc">Chạy bất kỳ lệnh PowerShell nào trên máy nhân viên. Kết quả trả về dạng text. Mặc định timeout 30 giây.</div>
+    </div>
+  </div>
+
+  <h3>Nút "Tất cả máy"</h3>
+  <p>Bên cạnh System Info và Notification có nút <code>📢 Tất cả máy</code> — gửi lệnh đến tất cả máy đang online cùng lúc. Thường dùng cho thông báo toàn công ty hoặc kiểm tra hàng loạt.</p>
+
+  <h3>Ví dụ lệnh PowerShell hữu ích</h3>
+  <table>
+    <tr><th>Mục đích</th><th>Lệnh</th></tr>
+    <tr><td>Xem uptime máy</td><td><code>(Get-Date) - (gcim Win32_OperatingSystem).LastBootUpTime</code></td></tr>
+    <tr><td>Khởi động lại Explorer</td><td><code>Stop-Process -Name explorer -Force</code></td></tr>
+    <tr><td>Xem IP chi tiết</td><td><code>ipconfig</code></td></tr>
+    <tr><td>Xem disk space</td><td><code>Get-PSDrive C | Select-Object Used,Free</code></td></tr>
+    <tr><td>Kill tiến trình</td><td><code>Stop-Process -Name "chrome" -Force</code></td></tr>
+    <tr><td>Chạy app</td><td><code>Start-Process notepad</code></td></tr>
+  </table>
+
+  <!-- SECTION 5 -->
+  <h2 id="printer">🖨️ 5. Quản lý máy in</h2>
+
+  <div class="grid-2">
+    <div class="cmd-card">
+      <div class="cmd-icon">📄</div>
+      <div class="cmd-title">Liệt kê máy in</div>
+      <div class="cmd-desc">Hiển thị tất cả printer đã cài trên máy nhân viên, kèm trạng thái và cổng kết nối.</div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-icon">📋</div>
+      <div class="cmd-title">Hàng đợi in</div>
+      <div class="cmd-desc">Xem danh sách tài liệu đang chờ in. Xem ai đang in gì, trạng thái job.</div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-icon">🗑️</div>
+      <div class="cmd-title">Xoá hàng đợi</div>
+      <div class="cmd-desc">Xoá tất cả job in đang pending. Dùng khi máy in bị kẹt hoặc có job lỗi.</div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-icon">🔌</div>
+      <div class="cmd-title">Bật/Tắt máy in</div>
+      <div class="cmd-desc">Nhập tên printer → Toggle Enable/Disable. Dùng để tạm dừng in cho một máy cụ thể.</div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-icon">➕</div>
+      <div class="cmd-title">Cài máy in qua IP</div>
+      <div class="cmd-desc">Thêm network printer vào máy nhân viên từ xa. Nhập IP máy in + Tên hiển thị → Cài đặt.</div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-icon">📤</div>
+      <div class="cmd-title">In file</div>
+      <div class="cmd-desc">In một file trên máy nhân viên ra printer. Nhập đường dẫn file (trên máy nhân viên) + tên printer.</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>Ví dụ cài máy in:</strong> IP = <code>192.168.1.50</code>, Tên = <code>Máy in tầng 2</code> → nhấn Cài đặt. Printer sẽ xuất hiện trong danh sách của máy nhân viên.
+  </div>
+
+  <!-- SECTION 6 -->
+  <h2 id="avatar">👤 6. Avatar & Tên IT Admin</h2>
+
+  <div class="card">
+    <h3>Thay đổi tên hiển thị</h3>
+    <p>Trong panel phải, nhấn icon ✏️ cạnh tên admin → nhập tên mới → nhấn ✓ để lưu. Tên này sẽ xuất hiện làm tiêu đề thông báo khi gửi notification.</p>
+
+    <h3 style="margin-top: 16px">Thay đổi avatar</h3>
+    <p>Nhấn vào vòng tròn avatar → chọn file ảnh. Avatar được lưu trong browser và tự đồng bộ sang tất cả máy agent đang online.</p>
+  </div>
+
+  <div class="warning">
+    ⚠️ <strong>Lưu ý về avatar:</strong> Avatar lưu trong localStorage của browser. Nếu dùng máy tính khác hoặc xóa dữ liệu browser, cần upload lại. Avatar sau khi upload sẽ được đẩy sang các máy agent để hiển thị nhất quán.
+  </div>
+
+  <!-- SECTION 7 -->
+  <h2 id="faq">❓ 7. Xử lý sự cố</h2>
+
+  <table>
+    <tr><th>Triệu chứng</th><th>Nguyên nhân</th><th>Cách xử lý</th></tr>
+    <tr>
+      <td>Máy không hiện trong danh sách</td>
+      <td>Agent chưa chạy hoặc máy tắt</td>
+      <td>Bật máy nhân viên, đảm bảo có internet. Hoặc chạy lại <code>install.bat</code>.</td>
+    </tr>
+    <tr>
+      <td>Trạng thái "Đang kết nối..." không đổi</td>
+      <td>VPS relay bị lỗi hoặc web chưa load xong</td>
+      <td>Chờ 10-15 giây, refresh trang, mở lại tab IT Agent.</td>
+    </tr>
+    <tr>
+      <td>Lệnh gửi nhưng không có kết quả</td>
+      <td>Agent bị crash hoặc mất kết nối</td>
+      <td>Kiểm tra máy nhân viên còn online không. Thử gửi lại sau 10 giây.</td>
+    </tr>
+    <tr>
+      <td>Camera trả về lỗi</td>
+      <td>Máy không có webcam hoặc bị ứng dụng khác chiếm</td>
+      <td>Đóng Zoom/Teams/Meet trên máy nhân viên trước khi thử.</td>
+    </tr>
+    <tr>
+      <td>PowerShell không trả về gì</td>
+      <td>Lệnh chạy quá 30 giây (timeout)</td>
+      <td>Dùng lệnh ngắn hơn hoặc thêm <code>-timeout 60</code> trong params.</td>
+    </tr>
+    <tr>
+      <td>Máy in không tìm thấy</td>
+      <td>Driver chưa cài hoặc printer offline</td>
+      <td>Kiểm tra máy in bật và kết nối mạng. Thử dùng <code>Get-Printer</code> qua PowerShell.</td>
+    </tr>
+  </table>
+
+  <div class="card">
+    <h3>Kiểm tra agent có đang chạy không</h3>
+    <p>Mở Task Manager trên máy nhân viên → tab Details → tìm tiến trình <code>pythonw.exe</code>. Nếu không thấy, agent đã tắt. Chạy lại bằng cách: mở <code>C:\YiDingAgent\agent.py</code> bằng pythonw.exe hoặc khởi động lại Windows.</p>
+  </div>
+
+</div>
+
+<footer>
+  YiDing IT Agent v1.0 &nbsp;·&nbsp; Tài liệu nội bộ &nbsp;·&nbsp; Không chia sẻ ra ngoài
+</footer>
+
+</body>
+</html>
