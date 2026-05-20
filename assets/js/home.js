@@ -720,6 +720,358 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     { id: "settings", icon: "⚙", tooltipKey: "common.settings" }
   ];
 
+  // ─── IT Agent Module ────────────────────────────────────────────────────────
+  let itaWS = null;
+  let itaConnected = false;
+  let itaMachines = {};
+  let itaSelected = null;
+  let itaPending = {};
+  let itaJobCnt = 0;
+  let itaMessages = [];
+  let itaSenderName = localStorage.getItem("itaSenderName") || "YiDing IT Admin";
+  let itaAvatarURL = localStorage.getItem("itaAvatarURL") || null;
+  const ITA_VPS = "ws://46.225.160.243:9876/dashboard";
+
+  function itaEsc(s) {
+    return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function itaInit() {
+    if (itaWS && (itaWS.readyState === 0 || itaWS.readyState === 1)) return;
+    itaConnect();
+  }
+
+  function itaConnect() {
+    try { itaWS = new WebSocket(ITA_VPS); } catch (e) { return; }
+    itaWS.onopen = () => {
+      itaConnected = true;
+      itaUpdateStatus();
+      itaWS.send(JSON.stringify({ type: "list_agents" }));
+    };
+    itaWS.onclose = () => {
+      itaConnected = false;
+      itaUpdateStatus();
+      setTimeout(itaConnect, 5000);
+    };
+    itaWS.onerror = () => {};
+    itaWS.onmessage = e => {
+      const d = JSON.parse(e.data);
+      if (d.type === "agent_list") {
+        d.agents.forEach(a => { itaMachines[a.device_id] = { hostname: a.hostname, online: a.online }; });
+        itaUpdateDetail();
+        setTimeout(itaPushAvAll, 500);
+      } else if (d.type === "agent_online") {
+        itaMachines[d.device_id] = { hostname: d.hostname, online: true };
+        itaUpdateDetail();
+        itaPushAvTo(d.device_id);
+      } else if (d.type === "agent_offline") {
+        if (itaMachines[d.device_id]) itaMachines[d.device_id].online = false;
+        itaUpdateDetail();
+      } else if (d.type === "result") {
+        itaShowResult(d);
+      }
+    };
+  }
+
+  function itaUpdateStatus() {
+    const dot = document.getElementById("ita-dot");
+    const txt = document.getElementById("ita-status-text");
+    const cnt = document.getElementById("ita-count");
+    if (dot) dot.className = "ita-dot" + (itaConnected ? " on" : "");
+    if (txt) txt.textContent = itaConnected ? "Đã kết nối VPS" : "Đang kết nối...";
+    if (cnt) {
+      const ids = Object.keys(itaMachines);
+      const online = ids.filter(id => itaMachines[id].online).length;
+      cnt.textContent = ids.length ? `${online}/${ids.length} máy online` : "";
+    }
+  }
+
+  function itaUpdateDetail() {
+    if (uiState.activeTab !== "itAgent") return;
+    const ml = document.getElementById("ita-machine-list");
+    if (ml) {
+      const ids = Object.keys(itaMachines);
+      if (!ids.length) {
+        ml.innerHTML = '<div class="ita-empty-machines">Chưa có máy nào kết nối</div>';
+      } else {
+        ml.innerHTML = ids.map(id => `
+          <div class="ita-m-item${id === itaSelected ? " active" : ""}" data-ita-machine="${itaEsc(id)}">
+            <div class="ita-m-dot${itaMachines[id].online ? " on" : ""}"></div>
+            <div style="overflow:hidden;min-width:0">
+              <div class="ita-m-name">${itaEsc(id)}</div>
+              <div class="ita-m-host">${itaEsc(itaMachines[id].hostname || "")}</div>
+            </div>
+          </div>`).join("");
+      }
+    }
+    itaUpdateStatus();
+    itaUpdateButtons();
+  }
+
+  function itaUpdateButtons() {
+    const on = itaSelected && itaMachines[itaSelected] && itaMachines[itaSelected].online;
+    ["ita-btn-shot", "ita-btn-cam", "ita-btn-sys", "ita-btn-proc", "ita-btn-net",
+     "ita-btn-notif", "ita-btn-ps", "ita-btn-list-pt", "ita-btn-queue",
+     "ita-btn-clr-q", "ita-btn-install-pt", "ita-btn-print-file"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = !on;
+    });
+  }
+
+  function itaSelectMachine(id) {
+    itaSelected = id;
+    itaUpdateDetail();
+    const on = itaMachines[id] && itaMachines[id].online;
+    itaAddMsg(
+      `Đã chọn: <b>${itaEsc(id)}</b> (${itaEsc((itaMachines[id] || {}).hostname || "")}) — ${on ? "🟢 Online" : "🔴 Offline"}`,
+      "select", ""
+    );
+  }
+
+  function itaAddMsg(html, action, dev, isErr = false) {
+    const msg = { html, action, dev: dev || "", isErr, time: new Date().toLocaleTimeString() };
+    itaMessages.unshift(msg);
+    if (itaMessages.length > 60) itaMessages.pop();
+    itaRenderOutput();
+  }
+
+  function itaRenderOutput() {
+    const output = document.getElementById("ita-output");
+    if (!output) return;
+    if (!itaMessages.length) {
+      output.innerHTML = '<div class="ita-empty-msg">← Chọn một máy để bắt đầu</div>';
+      return;
+    }
+    output.innerHTML = itaMessages.map((m, i) => `
+      <div class="ita-msg${m.isErr ? " err" : ""}"${m.msgId ? ` id="ita-msgwrap-${m.msgId}"` : ""}>
+        <div class="ita-msg-hdr">
+          <span class="ita-msg-act">${itaEsc(m.action)}</span>
+          <span class="ita-msg-dev">${itaEsc(m.dev)}</span>
+          <span class="ita-msg-time">${m.time}</span>
+        </div>
+        <div class="ita-msg-body"${m.msgId ? ` id="ita-msgbody-${m.msgId}"` : ""}>${m.html}</div>
+      </div>`).join("");
+  }
+
+  function itaShowResult(d) {
+    if (d.action === "save_avatar") return;
+    const out = d.output || "";
+    const isErr = d.status === "error";
+    const isB64 = out.length > 200 && /^[A-Za-z0-9+/]+=*$/.test(out.replace(/\s/g, ""));
+
+    const pendingMsgId = itaPending[d.job_id];
+    if (pendingMsgId) {
+      delete itaPending[d.job_id];
+      const idx = itaMessages.findIndex(m => m.msgId === pendingMsgId);
+      if (idx >= 0) {
+        const m = itaMessages[idx];
+        m.isErr = isErr;
+        m.pending = false;
+        if (isB64 && d.action === "capture_camera")
+          m.html = `<img src="data:image/jpeg;base64,${out}" onclick="window.open(this.src)">`;
+        else if (isB64)
+          m.html = `<img src="data:image/png;base64,${out}" onclick="window.open(this.src)">`;
+        else if (d.action === "get_processes") m.html = itaFmtProcesses(out);
+        else if (d.action === "list_printers") m.html = itaFmtPrinters(out);
+        else if (d.action === "get_print_queue") m.html = itaFmtPrintQueue(out);
+        else m.html = itaEsc(out || (isErr ? "(no output)" : "✓ OK"));
+        itaRenderOutput();
+        return;
+      }
+    }
+
+    let html;
+    if (isB64 && d.action === "capture_camera")
+      html = `<img src="data:image/jpeg;base64,${out}" onclick="window.open(this.src)">`;
+    else if (isB64)
+      html = `<img src="data:image/png;base64,${out}" onclick="window.open(this.src)">`;
+    else if (d.action === "get_processes") html = itaFmtProcesses(out);
+    else if (d.action === "list_printers") html = itaFmtPrinters(out);
+    else if (d.action === "get_print_queue") html = itaFmtPrintQueue(out);
+    else html = itaEsc(out || (isErr ? "(no output)" : "✓ OK"));
+
+    itaAddMsg(html, d.action || "result", d.device_id || "", isErr);
+  }
+
+  function itaSendCmd(action, params = {}, target = null) {
+    const tgt = target || itaSelected;
+    if (!tgt || !itaWS) return;
+    const job_id = "j" + Date.now().toString(36) + (++itaJobCnt);
+    const msgId = "m" + itaJobCnt;
+    itaWS.send(JSON.stringify({ type: "cmd", target: tgt, action, params, job_id }));
+    itaPending[job_id] = msgId;
+    const msg = { msgId, html: '<span class="ita-spinner"></span> Đang chờ...', action, dev: tgt, isErr: false, time: new Date().toLocaleTimeString(), pending: true };
+    itaMessages.unshift(msg);
+    if (itaMessages.length > 60) itaMessages.pop();
+    itaRenderOutput();
+  }
+
+  function itaSendNotif() {
+    const inp = document.getElementById("ita-notif-msg");
+    const msg = inp ? inp.value.trim() : "";
+    if (!msg) return;
+    itaSendCmd("send_notification", { title: itaSenderName, message: msg });
+    if (inp) inp.value = "";
+  }
+
+  function itaSendPS() {
+    const inp = document.getElementById("ita-ps-cmd");
+    const cmd = inp ? inp.value.trim() : "";
+    if (!cmd) return;
+    itaSendCmd("powershell", { command: cmd });
+    if (inp) inp.value = "";
+  }
+
+  function itaSendNotifAll() {
+    const inp = document.getElementById("ita-notif-msg");
+    const msg = (inp ? inp.value.trim() : "") || "Thông báo từ quản lý";
+    if (!itaWS) return;
+    itaWS.send(JSON.stringify({ type: "cmd_all", action: "send_notification", params: { title: itaSenderName, message: msg } }));
+    itaAddMsg(`🔔 Broadcast: <b>${itaEsc(msg)}</b>`, "broadcast", "ALL");
+  }
+
+  function itaSendCmdAll(action) {
+    if (!itaWS) return;
+    itaWS.send(JSON.stringify({ type: "cmd_all", action, params: {} }));
+    itaAddMsg('<span class="ita-spinner"></span> Đang gửi tất cả...', action, "ALL");
+  }
+
+  function itaTogglePrinter() {
+    const panel = document.getElementById("ita-printer-panel");
+    const btn = document.getElementById("ita-btn-printer");
+    if (!panel) return;
+    const isOpen = panel.classList.contains("open");
+    panel.classList.toggle("open", !isOpen);
+    if (btn) btn.classList.toggle("ita-btn--active", !isOpen);
+  }
+
+  function itaInstallPrinter() {
+    const ip = document.getElementById("ita-pt-ip");
+    const name = document.getElementById("ita-pt-name");
+    if (!ip || !name || !ip.value.trim() || !name.value.trim()) return;
+    itaSendCmd("install_printer_ip", { ip: ip.value.trim(), name: name.value.trim() });
+    ip.value = ""; name.value = "";
+  }
+
+  function itaPrintFile() {
+    const path = document.getElementById("ita-pt-file");
+    const printer = document.getElementById("ita-pt-printer");
+    if (!path || !path.value.trim()) return;
+    itaSendCmd("print_file", { path: path.value.trim(), printer: (printer ? printer.value.trim() : "") });
+    if (path) path.value = "";
+  }
+
+  function itaOnAvatarChange(input) {
+    const file = input.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const sz = Math.min(img.naturalWidth, img.naturalHeight);
+        const sx = (img.naturalWidth - sz) / 2;
+        const sy = (img.naturalHeight - sz) / 2;
+        const c = document.createElement("canvas");
+        c.width = 600; c.height = 600;
+        const ctx = c.getContext("2d");
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, sx, sy, sz, sz, 0, 0, 600, 600);
+        itaAvatarURL = c.toDataURL("image/png");
+        localStorage.setItem("itaAvatarURL", itaAvatarURL);
+        itaSetAvUI();
+        itaPushAvAll();
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function itaSetAvUI() {
+    const img = document.getElementById("ita-av-img");
+    const ph = document.getElementById("ita-av-ph");
+    if (!img) return;
+    img.src = itaAvatarURL || "";
+    img.style.display = itaAvatarURL ? "block" : "none";
+    if (ph) ph.style.display = itaAvatarURL ? "none" : "flex";
+  }
+
+  function itaPushAvAll() {
+    if (!itaAvatarURL || !itaWS) return;
+    const b64 = itaAvatarURL.split(",")[1];
+    Object.keys(itaMachines).filter(id => itaMachines[id].online).forEach(id =>
+      itaWS.send(JSON.stringify({ type: "cmd", target: id, action: "save_avatar", params: { data: b64 }, job_id: "av" + Date.now() }))
+    );
+  }
+
+  function itaPushAvTo(id) {
+    if (!itaAvatarURL || !itaWS) return;
+    const b64 = itaAvatarURL.split(",")[1];
+    itaWS.send(JSON.stringify({ type: "cmd", target: id, action: "save_avatar", params: { data: b64 }, job_id: "av" + Date.now() }));
+  }
+
+  function itaStartEditName() {
+    const area = document.getElementById("ita-name-area");
+    if (!area) return;
+    area.innerHTML = `<div class="ita-name-edit"><input class="ita-name-edit-inp" id="ita-name-inp" value="${itaEsc(itaSenderName)}" maxlength="40"><button class="ita-save-name-btn" data-ita-detail="save-name">✓</button></div>`;
+    const inp = document.getElementById("ita-name-inp");
+    if (inp) {
+      inp.focus(); inp.select();
+      inp.addEventListener("keydown", e => {
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === "Enter") itaSaveName();
+        if (e.key === "Escape") itaResetName();
+      });
+    }
+  }
+
+  function itaSaveName() {
+    const v = document.getElementById("ita-name-inp");
+    if (v && v.value.trim()) { itaSenderName = v.value.trim(); localStorage.setItem("itaSenderName", itaSenderName); }
+    itaResetName();
+  }
+
+  function itaResetName() {
+    const area = document.getElementById("ita-name-area");
+    if (!area) return;
+    area.innerHTML = `<div class="ita-name-row"><span class="ita-name-txt">${itaEsc(itaSenderName)}</span><button class="ita-edit-name-btn" data-ita-detail="edit-name">✏️</button></div>`;
+  }
+
+  function itaFmtProcesses(raw) {
+    try {
+      const ps = JSON.parse(raw);
+      if (!Array.isArray(ps)) return itaEsc(raw);
+      const hdr = "Process".padEnd(24) + " " + "PID".padStart(6) + "  " + "CPU%".padStart(6) + "  " + "RAM%".padStart(6);
+      const sep = "─".repeat(48);
+      const rows = ps.filter(p => p.name).slice(0, 25).map(p =>
+        (p.name || "").slice(0, 23).padEnd(24) + " " + String(p.pid || "").padStart(6) + "  " +
+        (p.cpu_percent || 0).toFixed(1).padStart(6) + "  " + (p.memory_percent || 0).toFixed(2).padStart(6)
+      );
+      return [hdr, sep, ...rows].join("\n");
+    } catch (ex) { return itaEsc(raw); }
+  }
+
+  function itaFmtPrinters(raw) {
+    try {
+      let arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) arr = [arr];
+      const hdr = "Name".padEnd(30) + " " + "Status".padEnd(12) + " Port";
+      const rows = arr.map(p => (p.Name || "").padEnd(30) + " " + String(p.Status || p.PrinterStatus || "?").padEnd(12) + " " + (p.PortName || "") + (p.Default ? " ★" : ""));
+      return [hdr, "─".repeat(56), ...rows].join("\n");
+    } catch (ex) { return itaEsc(raw); }
+  }
+
+  function itaFmtPrintQueue(raw) {
+    try {
+      let arr = JSON.parse(raw);
+      if (!arr || !arr.length) return "(No print jobs in queue)";
+      if (!Array.isArray(arr)) arr = [arr];
+      const hdr = "Document".padEnd(28) + " " + "Status".padEnd(14) + " User";
+      const rows = arr.map(j => (j.Document || "").slice(0, 28).padEnd(28) + " " + (j.JobStatus || "").padEnd(14) + " " + (j.UserName || "") + " [" + (j.TotalPages || "?") + "p]");
+      return [hdr, "─".repeat(58), ...rows].join("\n");
+    } catch (ex) { return itaEsc(raw); }
+  }
+  // ─── End IT Agent Module ────────────────────────────────────────────────────
+
   renderAll();
   bindEvents();
   startLiveClockTicker();
@@ -778,6 +1130,7 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       uiState.accountFormMode = "create";
       uiState.editingAccountUsername = "";
       storeActiveTab(currentAccount, nextTab);
+      if (nextTab === "itAgent") itaInit();
       renderAll();
     });
 
@@ -847,6 +1200,23 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     });
 
     chatBody.addEventListener("click", function (event) {
+      // IT Agent button delegation
+      const itaCmdBtn = event.target.closest("[data-ita-cmd]");
+      if (itaCmdBtn) { itaSendCmd(itaCmdBtn.getAttribute("data-ita-cmd")); return; }
+      const itaCmdAllBtn = event.target.closest("[data-ita-cmd-all]");
+      if (itaCmdAllBtn) { itaSendCmdAll(itaCmdAllBtn.getAttribute("data-ita-cmd-all")); return; }
+      const itaActionBtn = event.target.closest("[data-ita-action]");
+      if (itaActionBtn) {
+        const a = itaActionBtn.getAttribute("data-ita-action");
+        if (a === "send-notif") { itaSendNotif(); return; }
+        if (a === "send-notif-all") { itaSendNotifAll(); return; }
+        if (a === "run-ps") { itaSendPS(); return; }
+        if (a === "toggle-printer") { itaTogglePrinter(); return; }
+        if (a === "install-printer") { itaInstallPrinter(); return; }
+        if (a === "print-file") { itaPrintFile(); return; }
+        return;
+      }
+
       const salaryAction = event.target.closest("[data-salary-action]");
       if (salaryAction) {
         handleSalaryAction(salaryAction);
@@ -921,6 +1291,18 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     });
 
     detailBody.addEventListener("click", function (event) {
+      // IT Agent detail delegation
+      const itaDetailBtn = event.target.closest("[data-ita-detail]");
+      if (itaDetailBtn) {
+        const a = itaDetailBtn.getAttribute("data-ita-detail");
+        if (a === "av-click") { document.getElementById("ita-av-file") && document.getElementById("ita-av-file").click(); return; }
+        if (a === "edit-name") { itaStartEditName(); return; }
+        if (a === "save-name") { itaSaveName(); return; }
+        return;
+      }
+      const itaMachineItem = event.target.closest("[data-ita-machine]");
+      if (itaMachineItem) { itaSelectMachine(itaMachineItem.getAttribute("data-ita-machine")); return; }
+
       const accountToggle = event.target.closest("[data-account-action='toggle-form']");
       const accountCancel = event.target.closest("[data-account-action='cancel-form']");
       const accountEdit = event.target.closest("[data-account-action='edit-account']");
@@ -1203,20 +1585,65 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     if (uiState.activeTab === "itAgent") {
       chatTitle.textContent = t("itAgentTitle");
       chatBadge.textContent = t("itAgentBadge");
-      chatBody.innerHTML = [
-        '<div class="dashboard-chat-stack">',
-        '<section class="dashboard-chat-surface">',
-        '<h3 class="dashboard-chat-surface__title">' + escapeHtml(t("itAgentTitle")) + "</h3>",
-        '<p class="dashboard-chat-surface__body">' + escapeHtml(t("itAgentBody")) + "</p>",
-        '<div class="dashboard-chat-chip-grid">',
-        renderChatChip("Windows", "10 / 11"),
-        renderChatChip("Auto-start", "✓"),
-        renderChatChip("Silent", "✓"),
-        "</div>",
-        '<a href="/downloads/install.bat" download class="dashboard-button dashboard-button--accent" style="display:inline-block;margin-top:12px;">' + escapeHtml(t("itAgentDownload")) + "</a>",
-        "</section>",
-        "</div>"
-      ].join("");
+      const _on = itaSelected && itaMachines[itaSelected] && itaMachines[itaSelected].online;
+      const _dis = _on ? "" : " disabled";
+      chatBody.innerHTML = `
+        <div class="ita-root">
+          <div class="ita-status-bar">
+            <div id="ita-dot" class="ita-dot${itaConnected ? " on" : ""}"></div>
+            <span id="ita-status-text" class="ita-status-text">${itaConnected ? "Đã kết nối VPS" : "Đang kết nối..."}</span>
+            <span id="ita-count" class="ita-count">${(function(){const ids=Object.keys(itaMachines);return ids.length?`${ids.filter(function(id){return itaMachines[id].online;}).length}/${ids.length} máy online`:"";})()}</span>
+          </div>
+          <div class="ita-toolbar">
+            <div class="ita-tb-row">
+              <button class="ita-btn ita-btn--purple" id="ita-btn-shot" data-ita-cmd="screenshot"${_dis}>📷 Screenshot</button>
+              <button class="ita-btn ita-btn--purple" id="ita-btn-cam" data-ita-cmd="capture_camera"${_dis}>📸 Camera</button>
+              <button class="ita-btn ita-btn--purple" id="ita-btn-sys" data-ita-cmd="system_info"${_dis}>📊 Hệ thống</button>
+              <button class="ita-btn ita-btn--muted" id="ita-btn-proc" data-ita-cmd="get_processes"${_dis}>⚙️ Processes</button>
+              <button class="ita-btn ita-btn--muted" id="ita-btn-net" data-ita-cmd="network_info"${_dis}>🌐 Mạng</button>
+              <div class="ita-sep"></div>
+              <button class="ita-btn ita-btn--muted" data-ita-cmd-all="system_info">📊 Tất cả</button>
+            </div>
+            <div class="ita-tb-row">
+              <input class="ita-input" id="ita-notif-msg" placeholder="Nội dung thông báo...">
+              <button class="ita-btn ita-btn--orange" id="ita-btn-notif" data-ita-action="send-notif"${_dis}>🔔 Gửi</button>
+              <div class="ita-sep"></div>
+              <button class="ita-btn ita-btn--muted" data-ita-action="send-notif-all">🔔 Tất cả</button>
+            </div>
+            <div class="ita-tb-row">
+              <input class="ita-input ita-mono" id="ita-ps-cmd" placeholder="PowerShell command...">
+              <button class="ita-btn ita-btn--green" id="ita-btn-ps" data-ita-action="run-ps"${_dis}>▶ Chạy PS</button>
+              <div class="ita-sep"></div>
+              <button class="ita-btn ita-btn--muted" id="ita-btn-printer" data-ita-action="toggle-printer">🖨</button>
+            </div>
+            <div class="ita-printer-panel" id="ita-printer-panel">
+              <div class="ita-tb-row">
+                <button class="ita-btn ita-btn--muted" id="ita-btn-list-pt" data-ita-cmd="list_printers"${_dis}>🖨 List</button>
+                <button class="ita-btn ita-btn--muted" id="ita-btn-queue" data-ita-cmd="get_print_queue"${_dis}>📋 Queue</button>
+                <button class="ita-btn ita-btn--muted" id="ita-btn-clr-q" data-ita-cmd="clear_print_queue"${_dis}>🗑 Clear Queue</button>
+              </div>
+              <div class="ita-tb-row">
+                <input class="ita-input" id="ita-pt-ip" placeholder="Printer IP (e.g. 192.168.1.50)" style="flex:1">
+                <input class="ita-input" id="ita-pt-name" placeholder="Printer name" style="flex:1">
+                <button class="ita-btn ita-btn--muted" id="ita-btn-install-pt" data-ita-action="install-printer"${_dis}>➕ Install</button>
+              </div>
+              <div class="ita-tb-row">
+                <input class="ita-input ita-mono" id="ita-pt-file" placeholder="File path (C:\\file.pdf)" style="flex:1">
+                <input class="ita-input" id="ita-pt-printer" placeholder="Printer name (blank=default)" style="flex:0.7;max-width:200px">
+                <button class="ita-btn ita-btn--green" id="ita-btn-print-file" data-ita-action="print-file"${_dis}>🖨 Print</button>
+              </div>
+            </div>
+          </div>
+          <div class="ita-output" id="ita-output"></div>
+        </div>`;
+
+      const notifInp = document.getElementById("ita-notif-msg");
+      const psInp = document.getElementById("ita-ps-cmd");
+      if (notifInp) notifInp.addEventListener("keydown", function(e) { if (e.isComposing || e.keyCode === 229) return; if (e.key === "Enter") itaSendNotif(); });
+      if (psInp) psInp.addEventListener("keydown", function(e) { if (e.isComposing || e.keyCode === 229) return; if (e.key === "Enter") itaSendPS(); });
+
+      itaRenderOutput();
+      itaInit();
       return;
     }
 
@@ -1303,19 +1730,35 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 
     if (uiState.activeTab === "itAgent") {
       detailTitle.textContent = t("itAgentTitle");
-      detailBody.innerHTML = [
-        '<section class="dashboard-surface-card">',
-        '<h3 class="dashboard-panel__title">' + escapeHtml(t("itAgentTitle")) + "</h3>",
-        '<div class="dashboard-detail-stack" style="margin-top:12px;">',
-        '<div class="dashboard-chat-chip-grid">',
-        renderChatChip(t("itAgentStep1"), ""),
-        renderChatChip(t("itAgentStep2"), ""),
-        renderChatChip(t("itAgentStep3"), ""),
-        "</div>",
-        '<p class="dashboard-readonly-note" style="margin-top:12px;">' + escapeHtml(t("itAgentNote")) + "</p>",
-        "</div>",
-        "</section>"
-      ].join("");
+      const _ids = Object.keys(itaMachines);
+      detailBody.innerHTML = `
+        <div class="ita-detail-root">
+          <div class="ita-av-section" title="Click để đổi avatar" data-ita-detail="av-click">
+            <div class="ita-av-ph" id="ita-av-ph" style="display:${itaAvatarURL ? "none" : "flex"}">👤</div>
+            <img id="ita-av-img" class="ita-av-img" src="${itaAvatarURL || ""}" style="display:${itaAvatarURL ? "block" : "none"}">
+            <div class="ita-av-overlay">📷</div>
+            <input type="file" id="ita-av-file" accept="image/*" style="display:none">
+          </div>
+          <div class="ita-name-area" id="ita-name-area">
+            <div class="ita-name-row">
+              <span class="ita-name-txt">${itaEsc(itaSenderName)}</span>
+              <button class="ita-edit-name-btn" data-ita-detail="edit-name">✏️</button>
+            </div>
+          </div>
+          <div class="ita-machine-section">
+            <div class="ita-sec-lbl">MÁY TÍNH</div>
+            <div id="ita-machine-list">${_ids.length
+              ? _ids.map(function(id){ return `<div class="ita-m-item${id===itaSelected?" active":""}" data-ita-machine="${itaEsc(id)}"><div class="ita-m-dot${itaMachines[id].online?" on":""}"></div><div style="overflow:hidden;min-width:0"><div class="ita-m-name">${itaEsc(id)}</div><div class="ita-m-host">${itaEsc(itaMachines[id].hostname||"")}</div></div></div>`; }).join("")
+              : '<div class="ita-empty-machines">Đang kết nối VPS...</div>'
+            }</div>
+          </div>
+          <div class="ita-download-section">
+            <a href="/downloads/install.bat" download class="dashboard-button dashboard-button--accent" style="display:block;text-align:center">⬇ ${itaEsc(t("itAgentDownload"))}</a>
+          </div>
+        </div>`;
+
+      const avFile = document.getElementById("ita-av-file");
+      if (avFile) avFile.addEventListener("change", function() { itaOnAvatarChange(avFile); });
       return;
     }
 
