@@ -69,8 +69,19 @@ for /f "tokens=*" %%v in ('python --version') do echo  OK: %%v
 echo  [2/5] Copy files vao %INSTALL_DIR%...
 if exist "%INSTALL_DIR%" rmdir /s /q "%INSTALL_DIR%"
 mkdir "%INSTALL_DIR%"
-copy /Y "%~dp0agent.py"          "%INSTALL_DIR%\" >nul
-copy /Y "%~dp0requirements.txt"  "%INSTALL_DIR%\" >nul
+
+:: Neu co agent.py ben canh thi copy, neu khong thi tai tu web
+if exist "%~dp0agent.py" (
+    copy /Y "%~dp0agent.py" "%INSTALL_DIR%\" >nul
+) else (
+    echo  [*] Khong co agent.py local - dang tai tu web...
+    powershell -Command "Invoke-WebRequest -Uri 'https://yidinginternational.com/downloads/agent.py' -OutFile '%INSTALL_DIR%\agent.py' -UseBasicParsing" >nul 2>&1
+    if not exist "%INSTALL_DIR%\agent.py" (
+        echo  [LOI] Khong tai duoc agent.py. Kiem tra ket noi internet.
+        pause & exit /b 1
+    )
+)
+
 if exist "%~dp0chichi.jpg"       copy /Y "%~dp0chichi.jpg"       "%INSTALL_DIR%\" >nul
 if exist "%~dp0chichi.png"       copy /Y "%~dp0chichi.png"       "%INSTALL_DIR%\" >nul
 if exist "%~dp0yiding_logo.png"  copy /Y "%~dp0yiding_logo.png"  "%INSTALL_DIR%\" >nul
