@@ -2041,8 +2041,8 @@ body[data-dashboard-tab="salary"] .dashboard-chat-body {
 }
 .ita-name-row { display: flex; align-items: center; gap: 6px; justify-content: center; }
 .ita-name-txt { font-size: 16px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
-.ita-edit-name-btn { background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.4); font-size: 13px; transition: 0.2s; padding: 2px 4px; }
-.ita-edit-name-btn:hover { color: #a78bfa; }
+.ita-edit-name-btn { background: none; border: none; cursor: pointer; color: rgba(167,139,250,0.75); font-size: 15px; transition: 0.2s; padding: 2px 5px; line-height: 1; }
+.ita-edit-name-btn:hover { color: #a78bfa; transform: scale(1.1); }
 .ita-name-edit { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.04); border: 1px solid #7c3aed; border-radius: 8px; padding: 7px 10px; }
 .ita-name-edit-inp { flex: 1; font-size: 15px; font-weight: 700; color: #fff; background: transparent; border: none; outline: none; min-width: 0; }
 .ita-save-name-btn { background: none; border: none; cursor: pointer; color: #10b981; font-size: 16px; line-height: 1; }

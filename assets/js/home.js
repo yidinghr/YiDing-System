@@ -353,7 +353,19 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       itAgentStep1: "1. 下載 install.bat 到員工電腦",
       itAgentStep2: "2. 以系統管理員執行",
       itAgentStep3: "3. 安裝完成後自動連接 Dashboard",
-      itAgentNote: "注意：需要管理員權限。安裝後自動隨 Windows 啟動。"
+      itAgentNote: "注意：需要管理員權限。安裝後自動隨 Windows 啟動。",
+      itaConnecting: "連接中…", itaConnected: "已連接 VPS",
+      itaMachinesLabel: "電腦", itaNoMachines: "尚無電腦連接",
+      itaWaitingVPS: "連接 VPS 中…", itaSelectFirst: "← 選擇電腦開始",
+      itaWaiting: "等待中…", itaBroadcast: "🔔 廣播",
+      itaBtnShot: "📷 截圖", itaBtnCam: "📸 鏡頭", itaBtnSys: "📊 系統",
+      itaBtnProc: "⚙️ 進程", itaBtnNet: "🌐 網路", itaBtnAll: "📊 全部",
+      itaNotifPh: "通知內容…", itaBtnSend: "🔔 發送", itaBtnSendAll: "🔔 全部",
+      itaPsPh: "PowerShell 命令…", itaBtnPS: "▶ 執行 PS",
+      itaBtnListPt: "🖨 列表", itaBtnQueue: "📋 隊列", itaBtnClearQ: "🗑 清空",
+      itaBtnInstallPt: "➕ 安裝", itaBtnPrint: "🖨 Print",
+      itaPtIpPh: "印表機 IP (e.g. 192.168.1.50)", itaPtNamePh: "印表機名稱",
+      itaPtFilePh: "列印路徑 (C:\\file.pdf)", itaPtPrinterPh: "印表機名稱 (空=預設)"
     },
     vi: {
       detailEyebrow: "LIVE PANEL",
@@ -464,7 +476,19 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       itAgentStep1: "1. Tải install.bat về máy nhân viên",
       itAgentStep2: "2. Chạy với quyền Administrator",
       itAgentStep3: "3. Sau khi cài xong, máy tự kết nối Dashboard",
-      itAgentNote: "Lưu ý: Cần quyền Admin. Agent tự khởi động cùng Windows."
+      itAgentNote: "Lưu ý: Cần quyền Admin. Agent tự khởi động cùng Windows.",
+      itaConnecting: "Đang kết nối…", itaConnected: "Đã kết nối VPS",
+      itaMachinesLabel: "MÁY TÍNH", itaNoMachines: "Chưa có máy nào kết nối",
+      itaWaitingVPS: "Đang kết nối VPS…", itaSelectFirst: "← Chọn một máy để bắt đầu",
+      itaWaiting: "Đang chờ…", itaBroadcast: "🔔 Broadcast",
+      itaBtnShot: "📷 Screenshot", itaBtnCam: "📸 Camera", itaBtnSys: "📊 Hệ thống",
+      itaBtnProc: "⚙️ Processes", itaBtnNet: "🌐 Mạng", itaBtnAll: "📊 Tất cả",
+      itaNotifPh: "Nội dung thông báo…", itaBtnSend: "🔔 Gửi", itaBtnSendAll: "🔔 Tất cả",
+      itaPsPh: "PowerShell command…", itaBtnPS: "▶ Chạy PS",
+      itaBtnListPt: "🖨 List", itaBtnQueue: "📋 Queue", itaBtnClearQ: "🗑 Clear Queue",
+      itaBtnInstallPt: "➕ Install", itaBtnPrint: "🖨 Print",
+      itaPtIpPh: "Printer IP (e.g. 192.168.1.50)", itaPtNamePh: "Printer name",
+      itaPtFilePh: "File path (C:\\file.pdf)", itaPtPrinterPh: "Printer name (blank=default)"
     },
     en: {
       detailEyebrow: "LIVE PANEL",
@@ -575,7 +599,19 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       itAgentStep1: "1. Download install.bat to the employee machine",
       itAgentStep2: "2. Run as Administrator",
       itAgentStep3: "3. Agent connects to Dashboard automatically",
-      itAgentNote: "Note: Administrator rights required. Agent auto-starts with Windows."
+      itAgentNote: "Note: Administrator rights required. Agent auto-starts with Windows.",
+      itaConnecting: "Connecting…", itaConnected: "Connected to VPS",
+      itaMachinesLabel: "MACHINES", itaNoMachines: "No machines connected yet",
+      itaWaitingVPS: "Connecting to VPS…", itaSelectFirst: "← Select a machine to start",
+      itaWaiting: "Waiting…", itaBroadcast: "🔔 Broadcast",
+      itaBtnShot: "📷 Screenshot", itaBtnCam: "📸 Camera", itaBtnSys: "📊 System",
+      itaBtnProc: "⚙️ Processes", itaBtnNet: "🌐 Network", itaBtnAll: "📊 All",
+      itaNotifPh: "Notification message…", itaBtnSend: "🔔 Send", itaBtnSendAll: "🔔 All",
+      itaPsPh: "PowerShell command…", itaBtnPS: "▶ Run PS",
+      itaBtnListPt: "🖨 List", itaBtnQueue: "📋 Queue", itaBtnClearQ: "🗑 Clear Queue",
+      itaBtnInstallPt: "➕ Install", itaBtnPrint: "🖨 Print",
+      itaPtIpPh: "Printer IP (e.g. 192.168.1.50)", itaPtNamePh: "Printer name",
+      itaPtFilePh: "File path (C:\\file.pdf)", itaPtPrinterPh: "Printer name (blank=default)"
     }
   };
 
@@ -778,12 +814,47 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     const txt = document.getElementById("ita-status-text");
     const cnt = document.getElementById("ita-count");
     if (dot) dot.className = "ita-dot" + (itaConnected ? " on" : "");
-    if (txt) txt.textContent = itaConnected ? "Đã kết nối VPS" : "Đang kết nối...";
+    if (txt) txt.textContent = itaConnected ? t("itaConnected") : t("itaConnecting");
     if (cnt) {
       const ids = Object.keys(itaMachines);
       const online = ids.filter(id => itaMachines[id].online).length;
-      cnt.textContent = ids.length ? `${online}/${ids.length} máy online` : "";
+      cnt.textContent = ids.length ? `${online}/${ids.length} online` : "";
     }
+  }
+
+  function itaApplyLang() {
+    // Update all translatable text in the IT Agent panel after render
+    const els = {
+      "ita-btn-shot": "itaBtnShot", "ita-btn-cam": "itaBtnCam",
+      "ita-btn-sys": "itaBtnSys", "ita-btn-proc": "itaBtnProc",
+      "ita-btn-net": "itaBtnNet", "ita-btn-notif": "itaBtnSend",
+      "ita-btn-ps": "itaBtnPS", "ita-btn-list-pt": "itaBtnListPt",
+      "ita-btn-queue": "itaBtnQueue", "ita-btn-clr-q": "itaBtnClearQ",
+      "ita-btn-install-pt": "itaBtnInstallPt", "ita-btn-print-file": "itaBtnPrint"
+    };
+    const btnsAll = document.querySelector("[data-ita-cmd-all='system_info']");
+    if (btnsAll) btnsAll.textContent = t("itaBtnAll");
+    const btnSendAll = document.querySelector("[data-ita-action='send-notif-all']");
+    if (btnSendAll) btnSendAll.textContent = t("itaBtnSendAll");
+    Object.keys(els).forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = t(els[id]);
+    });
+    const notifInp = document.getElementById("ita-notif-msg");
+    if (notifInp) notifInp.placeholder = t("itaNotifPh");
+    const psInp = document.getElementById("ita-ps-cmd");
+    if (psInp) psInp.placeholder = t("itaPsPh");
+    const ptIp = document.getElementById("ita-pt-ip");
+    if (ptIp) ptIp.placeholder = t("itaPtIpPh");
+    const ptName = document.getElementById("ita-pt-name");
+    if (ptName) ptName.placeholder = t("itaPtNamePh");
+    const ptFile = document.getElementById("ita-pt-file");
+    if (ptFile) ptFile.placeholder = t("itaPtFilePh");
+    const ptPrinter = document.getElementById("ita-pt-printer");
+    if (ptPrinter) ptPrinter.placeholder = t("itaPtPrinterPh");
+    const secLbl = document.querySelector(".ita-sec-lbl");
+    if (secLbl) secLbl.textContent = t("itaMachinesLabel");
+    itaUpdateStatus();
   }
 
   function itaUpdateDetail() {
@@ -792,7 +863,7 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     if (ml) {
       const ids = Object.keys(itaMachines);
       if (!ids.length) {
-        ml.innerHTML = '<div class="ita-empty-machines">Chưa có máy nào kết nối</div>';
+        ml.innerHTML = `<div class="ita-empty-machines">${itaEsc(itaConnected ? t("itaNoMachines") : t("itaWaitingVPS"))}</div>`;
       } else {
         ml.innerHTML = ids.map(id => `
           <div class="ita-m-item${id === itaSelected ? " active" : ""}" data-ita-machine="${itaEsc(id)}">
@@ -1643,6 +1714,7 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       if (psInp) psInp.addEventListener("keydown", function(e) { if (e.isComposing || e.keyCode === 229) return; if (e.key === "Enter") itaSendPS(); });
 
       itaRenderOutput();
+      itaApplyLang();
       itaInit();
       return;
     }
@@ -1746,10 +1818,10 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
             </div>
           </div>
           <div class="ita-machine-section">
-            <div class="ita-sec-lbl">MÁY TÍNH</div>
+            <div class="ita-sec-lbl">${itaEsc(t("itaMachinesLabel"))}</div>
             <div id="ita-machine-list">${_ids.length
               ? _ids.map(function(id){ return `<div class="ita-m-item${id===itaSelected?" active":""}" data-ita-machine="${itaEsc(id)}"><div class="ita-m-dot${itaMachines[id].online?" on":""}"></div><div style="overflow:hidden;min-width:0"><div class="ita-m-name">${itaEsc(id)}</div><div class="ita-m-host">${itaEsc(itaMachines[id].hostname||"")}</div></div></div>`; }).join("")
-              : '<div class="ita-empty-machines">Đang kết nối VPS...</div>'
+              : `<div class="ita-empty-machines">${itaEsc(itaConnected ? t("itaNoMachines") : t("itaWaitingVPS"))}</div>`
             }</div>
           </div>
           <div class="ita-download-section">
