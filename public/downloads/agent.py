@@ -445,10 +445,17 @@ async def act_read_whatsapp_db(date_from=None, date_to=None):
                 db_files = list(ls.glob("*.db")) + list(ls.glob("*.sqlite"))
                 if db_files:
                     import sqlite3
+                    SQLITE_MAGIC = b'SQLite format 3\x00'
                     for db_path in db_files[:3]:
                         tmp_db = Path(tempfile.mktemp(suffix=".db"))
                         try:
                             shutil.copy2(str(db_path), str(tmp_db))
+                            # Kiem tra header truoc khi mo SQLite
+                            header = tmp_db.read_bytes()[:16]
+                            if header != SQLITE_MAGIC[:16]:
+                                src_info.append(f"WhatsApp Desktop: {db_path.name} encrypted (SQLCipher) – khong doc duoc")
+                                tmp_db.unlink(missing_ok=True)
+                                continue
                             conn = sqlite3.connect(str(tmp_db))
                             cur  = conn.cursor()
                             tables = [r[0] for r in cur.execute(
