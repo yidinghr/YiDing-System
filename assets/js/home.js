@@ -766,7 +766,7 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
   let itaMessages = [];
   let itaSenderName = localStorage.getItem("itaSenderName") || "YiDing IT Admin";
   let itaAvatarURL = localStorage.getItem("itaAvatarURL") || null;
-  const ITA_VPS = "ws://46.225.160.243:9876/dashboard";
+  const ITA_VPS = "wss://agent.yidinginternational.com/dashboard";
 
   function itaEsc(s) {
     return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
