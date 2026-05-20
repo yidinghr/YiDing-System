@@ -177,27 +177,54 @@ async def act_open_app(path):
     try: subprocess.Popen(path); return f"Opened: {path}"
     except Exception as e: return f"Error: {e}"
 
-async def act_send_notification(title, message):
+async def act_send_notification(title, message, image_b64=None):
     await _ensure_aumid()
 
     def _xe(s):
         return str(s).replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('"','&quot;').replace("'","&apos;")
 
-    # Prefer PNG (lossless, pushed from dashboard) → fallback JPEG
+    # Logo cong ty: dung PNG cho appLogoOverride (ICO khong hien thi duoc trong toast)
+    logo = BASE_DIR / "yiding_logo.png"
+    if not logo.exists():
+        logo = BASE_DIR / "yiding_logo.ico"
+
+    logo_tag = ""
+    if logo.exists():
+        uri = str(logo).replace('\\', '/').replace(' ', '%20')
+        logo_tag = f'<image placement="appLogoOverride" src="file:///{uri}"/>'
+
+    # Avatar nguoi gui (hero image)
     avatar = BASE_DIR / "chichi.png"
     if not avatar.exists():
         avatar = BASE_DIR / "chichi.jpg"
 
-    img_tag = ""
+    hero_tag = ""
     if avatar.exists():
-        uri = str(avatar).replace('\\', '/').replace(' ', '%20')
-        img_tag = f'<image placement="appLogoOverride" hint-crop="circle" src="file:///{uri}"/>'
+        uri2 = str(avatar).replace('\\', '/').replace(' ', '%20')
+        hero_tag = f'<image placement="hero" src="file:///{uri2}"/>'
+
+    # Anh dinh kem tu dashboard (base64) → luu temp → hien trong toast
+    inline_img_tag = ""
+    _tmp_img = None
+    if image_b64:
+        try:
+            import tempfile, base64 as _b64
+            img_bytes = _b64.b64decode(image_b64)
+            ext = ".png" if img_bytes[:4] == b'\x89PNG' else ".jpg"
+            _tmp_img = Path(tempfile.mktemp(suffix=ext, dir=BASE_DIR))
+            _tmp_img.write_bytes(img_bytes)
+            uri3 = str(_tmp_img).replace('\\', '/').replace(' ', '%20')
+            inline_img_tag = f'<image src="file:///{uri3}"/>'
+        except Exception:
+            inline_img_tag = ""
 
     xml_body = (
         f'<toast><visual><binding template="ToastGeneric">'
-        f'{img_tag}'
+        f'{logo_tag}'
         f'<text>{_xe(title)}</text>'
         f'<text>{_xe(message)}</text>'
+        f'{inline_img_tag}'
+        f'{hero_tag}'
         f'</binding></visual></toast>'
     )
     xml_ps = xml_body.replace("'", "''")
@@ -210,6 +237,9 @@ async def act_send_notification(title, message):
         "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('YiDing.ITAgent').Show((New-Object Windows.UI.Notifications.ToastNotification $d))",
     ])
     result = await act_powershell(script, timeout=12)
+    if _tmp_img and _tmp_img.exists():
+        try: _tmp_img.unlink()
+        except Exception: pass
     if result.lower().startswith("error"): return result
     return f"Đã gửi: {message}"
 
@@ -526,7 +556,7 @@ ACTIONS = {
     "get_processes":        lambda p: act_get_processes(),
     "kill_process":         lambda p: act_kill_process(p.get("target", "")),
     "open_app":             lambda p: act_open_app(p.get("path", "")),
-    "send_notification":    lambda p: act_send_notification(p.get("title", "Thông báo"), p.get("message", "")),
+    "send_notification":    lambda p: act_send_notification(p.get("title", "Thông báo"), p.get("message", ""), p.get("image")),
     "network_info":         lambda p: act_network_info(),
     "read_file":            lambda p: act_read_file(p.get("path", "")),
     "save_avatar":          lambda p: act_save_avatar(p.get("data", "")),
