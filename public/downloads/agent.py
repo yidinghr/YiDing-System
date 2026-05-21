@@ -40,27 +40,47 @@ DEVICE_ID = f"PC-{socket.gethostname().upper()}"
 _aumid_ok = False
 
 _AUMID_CS = r"""
-using System; using System.Runtime.InteropServices;
+using System; using System.Runtime.InteropServices; using System.Runtime.InteropServices.ComTypes;
 public class AumidHelper {
-    [ComImport,Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [Guid("000214F9-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IShellLink {
+        void GetPath([Out,MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder f, int c, IntPtr p, int fl);
+        void GetIDList(out IntPtr p); void SetIDList(IntPtr p);
+        void GetDescription([Out,MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder s, int c);
+        void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string s);
+        void GetWorkingDirectory([Out,MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder s, int c);
+        void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string s);
+        void GetArguments([Out,MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder s, int c);
+        void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string s);
+        void GetHotkey(out short h); void SetHotkey(short h);
+        void GetShowCmd(out int i); void SetShowCmd(int i);
+        void GetIconLocation([Out,MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder s, int c, out int i);
+        void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string s, int i);
+        void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string s, int r);
+        void Resolve(IntPtr h, int f);
+        void SetPath([MarshalAs(UnmanagedType.LPWStr)] string s);
+    }
+    [Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     interface IPropertyStore {
         int GetCount(out uint c); int GetAt(uint i, out PKey k);
         int GetValue(ref PKey k, out PVar v); int SetValue(ref PKey k, ref PVar v); int Commit();
     }
     [StructLayout(LayoutKind.Sequential)] public struct PKey { public Guid fmtid; public uint pid; }
-    [StructLayout(LayoutKind.Explicit)]   public struct PVar  { [FieldOffset(0)]public ushort vt; [FieldOffset(8)]public IntPtr p; }
-    [DllImport("Shell32.dll")] static extern int SHGetPropertyStoreFromParsingName(
-        [MarshalAs(UnmanagedType.LPWStr)]string path, IntPtr pbc, uint f, ref Guid riid, out IntPtr ppv);
+    [StructLayout(LayoutKind.Explicit,Size=16)] public struct PVar { [FieldOffset(0)]public ushort vt; [FieldOffset(8)]public IntPtr p; }
+    [Guid("00021401-0000-0000-C000-000000000046"), ClassInterface(ClassInterfaceType.None), ComImport]
+    class ShellLink {}
     public static string SetLnkAppId(string lnk, string appId) {
         try {
-            Guid riid=new Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"); IntPtr ppv;
-            int hr=SHGetPropertyStoreFromParsingName(lnk,IntPtr.Zero,2,ref riid,out ppv);
-            if(hr!=0) return "SHGetProp hr="+hr;
-            var ps=(IPropertyStore)Marshal.GetObjectForIUnknown(ppv);
+            var sl=(IShellLink)new ShellLink();
+            var pf=(IPersistFile)sl;
+            pf.Load(lnk, 2);
+            var ps=(IPropertyStore)sl;
             var k=new PKey{fmtid=new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"),pid=5};
             var v=new PVar{vt=31,p=Marshal.StringToCoTaskMemUni(appId)};
-            ps.SetValue(ref k,ref v); ps.Commit();
-            Marshal.FreeCoTaskMem(v.p); Marshal.ReleaseComObject(ps);
+            int hr=ps.SetValue(ref k,ref v); Marshal.FreeCoTaskMem(v.p);
+            if(hr!=0) return "SetValue hr="+hr;
+            hr=ps.Commit(); if(hr!=0) return "Commit hr="+hr;
+            pf.Save(lnk,true);
             return "OK";
         } catch(Exception ex){return "ERR:"+ex.Message;}
     }
