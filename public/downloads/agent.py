@@ -88,6 +88,7 @@ async def _ensure_aumid():
 
     logo = ico_path if ico_path.exists() else (png_path if png_path.exists() else None)
     icon_ps = f'$s.IconLocation="{str(logo)},0"' if logo else ""
+    exe_path = str(Path(sys.executable))   # pythonw.exe, passed explicitly to avoid subprocess returning powershell.exe
 
     script = f"""
 Add-Type -TypeDefinition @'
@@ -98,16 +99,24 @@ $appId = 'YiDing.ITAgent'
 $lnkDir  = [IO.Path]::Combine($env:APPDATA,'Microsoft\\Windows\\Start Menu\\Programs')
 $lnkPath = [IO.Path]::Combine($lnkDir,'YiDing IT Agent.lnk')
 
-# Create / refresh shortcut
+# Delete stale shortcut so Windows refreshes icon cache
+if (Test-Path $lnkPath) {{ Remove-Item $lnkPath -Force }}
+
+# Create shortcut with correct pythonw.exe target
 $ws = New-Object -ComObject WScript.Shell
 $s  = $ws.CreateShortcut($lnkPath)
-$s.TargetPath   = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+$s.TargetPath   = '{exe_path}'
 $s.Description  = 'YiDing IT Agent'
 {icon_ps}
 $s.Save()
 
 # Stamp AppUserModelId property on the .lnk file
 [AumidHelper]::SetLnkAppId($lnkPath, $appId) | Out-Null
+
+# Notify shell to refresh icon cache
+$sig = '[DllImport("shell32.dll")]public static extern void SHChangeNotify(int e,int f,IntPtr a,IntPtr b);'
+Add-Type -MemberDefinition $sig -Name WinShell -Namespace Win32 -ErrorAction SilentlyContinue
+[Win32.WinShell]::SHChangeNotify(0x08000000,0,[IntPtr]::Zero,[IntPtr]::Zero)
 
 # Also write registry DisplayName (belt + suspenders)
 $rp = "HKCU:\\SOFTWARE\\Classes\\AppUserModelId\\$appId"
