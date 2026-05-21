@@ -183,25 +183,15 @@ async def act_send_notification(title, message, image_b64=None):
     def _xe(s):
         return str(s).replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('"','&quot;').replace("'","&apos;")
 
-    # Logo cong ty: dung PNG cho appLogoOverride (ICO khong hien thi duoc trong toast)
-    logo = BASE_DIR / "yiding_logo.png"
-    if not logo.exists():
-        logo = BASE_DIR / "yiding_logo.ico"
-
-    logo_tag = ""
-    if logo.exists():
-        uri = str(logo).replace('\\', '/').replace(' ', '%20')
-        logo_tag = f'<image placement="appLogoOverride" src="file:///{uri}"/>'
-
-    # Avatar Chi Chi: hien thi inline trong noi dung (o nho duoi cung) — CO DINH
+    # Avatar nhan vien: appLogoOverride = o vuong nho canh title (lien ket voi avatar Live Panel)
     avatar = BASE_DIR / "chichi.png"
     if not avatar.exists():
         avatar = BASE_DIR / "chichi.jpg"
 
-    chichi_tag = ""
+    avatar_tag = ""
     if avatar.exists():
-        uri2 = str(avatar).replace('\\', '/').replace(' ', '%20')
-        chichi_tag = f'<image src="file:///{uri2}"/>'   # inline = o nho cuoi, KHONG placement
+        uri = str(avatar).replace('\\', '/').replace(' ', '%20')
+        avatar_tag = f'<image placement="appLogoOverride" src="file:///{uri}"/>'
 
     # Anh dinh kem tu admin (base64) → hero (o to tren cung) — CHI KHI ADMIN GUI
     hero_tag = ""
@@ -221,10 +211,9 @@ async def act_send_notification(title, message, image_b64=None):
     xml_body = (
         f'<toast><visual><binding template="ToastGeneric">'
         f'{hero_tag}'
-        f'{logo_tag}'
+        f'{avatar_tag}'
         f'<text>{_xe(title)}</text>'
         f'<text>{_xe(message)}</text>'
-        f'{chichi_tag}'
         f'</binding></visual></toast>'
     )
     xml_ps = xml_body.replace("'", "''")

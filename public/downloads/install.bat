@@ -19,7 +19,7 @@ if %errorLevel% neq 0 (
 
 set INSTALL_DIR=C:\YiDingHrAgent
 set AGENT_URL=https://yidinginternational.com/downloads/agent.py
-set LOGO_URL=https://yidinginternational.com/downloads/yiding_logo.png
+set LOGO_URL=https://yidinginternational.com/downloads/yiding_logo.ico
 
 :: ── Mode 1: Co EXE san - deploy khong can Python ────────────────────────────
 if exist "%~dp0YiDingITAgent.exe" (
@@ -179,11 +179,10 @@ echo  [4/5] Cai thu vien (co the mat 2-3 phut)...
     psutil==6.1.1 ^
     mss==9.0.1 ^
     Pillow==11.0.0 ^
-    opencv-python==4.13.0.92 ^
-    ccl-chromium-indexeddb
+    opencv-python
 if %errorLevel% neq 0 (
     echo  [CANH BAO] Mot so thu vien cai that bai. Thu cai tung cai...
-    for %%L in (websockets psutil mss Pillow opencv-python ccl-chromium-indexeddb) do (
+    for %%L in (websockets psutil mss Pillow opencv-python) do (
         "%INSTALL_DIR%\venv\Scripts\pip" install -q %%L
     )
 )
