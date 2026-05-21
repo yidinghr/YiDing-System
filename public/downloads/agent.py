@@ -77,7 +77,7 @@ async def _ensure_aumid():
     if not logo.exists():
         logo = BASE_DIR / "yiding_logo.png"
     icon_ps = (
-        f'$s.IconLocation="{str(logo).replace(chr(92), chr(92)+chr(92))},0"'
+        f'$s.IconLocation="{str(logo)},0"'
         if logo.exists() else ""
     )
 
