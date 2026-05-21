@@ -771,6 +771,8 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
   let itaAvatarURL = localStorage.getItem("itaAvatarURL") || null;
   let _itaNotifImgB64 = null;
   const ITA_VPS = "wss://agent.yidinginternational.com/dashboard";
+  const _ITA_RESTART_CMD = "Start-Process powershell -WindowStyle Hidden -ArgumentList '-Command','Start-Sleep 3; Stop-Process -Name pythonw -Force; Start-Process C:\\YiDingHrAgent\\venv\\Scripts\\pythonw.exe -ArgumentList C:\\YiDingHrAgent\\agent.py -WindowStyle Hidden'";
+  const _ITA_UPDATE_CMD = "Start-Process powershell -WindowStyle Hidden -ArgumentList '-Command','Invoke-WebRequest -Uri ''https://yidinginternational.com/downloads/agent.py'' -OutFile ''C:\\YiDingHrAgent\\agent.py'' -UseBasicParsing; Start-Sleep 2; Stop-Process -Name pythonw -Force; Start-Process C:\\YiDingHrAgent\\venv\\Scripts\\pythonw.exe -ArgumentList C:\\YiDingHrAgent\\agent.py -WindowStyle Hidden'";
 
   function itaEsc(s) {
     return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -1026,6 +1028,22 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     if (!cmd) return;
     itaSendCmd("powershell", { command: cmd });
     if (inp) inp.value = "";
+  }
+
+  function itaRestartAgent() {
+    itaSendCmd("powershell", { command: _ITA_RESTART_CMD });
+  }
+
+  function itaUpdateAgent() {
+    itaSendCmd("powershell", { command: _ITA_UPDATE_CMD });
+  }
+
+  function itaUpdateAllAgents() {
+    if (!itaWS) return;
+    Object.keys(itaMachines).filter(id => itaMachines[id].online).forEach(id =>
+      itaWS.send(JSON.stringify({ type: "cmd", target: id, action: "powershell", params: { command: _ITA_UPDATE_CMD }, job_id: "upd" + Date.now() }))
+    );
+    itaAddMsg('<span class="ita-spinner"></span> Đang update tất cả máy...', "update_agent", "ALL");
   }
 
   function itaSendNotifAll() {
@@ -1341,6 +1359,9 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
           if (df !== null && dt !== null) itaSendCmd("read_whatsapp_db", { date_from: df, date_to: dt });
           return;
         }
+        if (a === "restart-agent") { itaRestartAgent(); return; }
+        if (a === "update-agent") { itaUpdateAgent(); return; }
+        if (a === "update-all-agents") { itaUpdateAllAgents(); return; }
         return;
       }
 
@@ -1748,6 +1769,12 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
               <button class="ita-btn ita-btn--green" id="ita-btn-ps" data-ita-action="run-ps"${_dis}>▶ Chạy PS</button>
               <div class="ita-sep"></div>
               <button class="ita-btn ita-btn--muted" id="ita-btn-printer" data-ita-action="toggle-printer">🖨</button>
+            </div>
+            <div class="ita-tb-row">
+              <button class="ita-btn ita-btn--muted" data-ita-action="restart-agent"${_dis}>🔄 Restart</button>
+              <button class="ita-btn ita-btn--muted" data-ita-action="update-agent"${_dis}>⬆ Update</button>
+              <div class="ita-sep"></div>
+              <button class="ita-btn ita-btn--muted" data-ita-action="update-all-agents">⬆ Update tất cả</button>
             </div>
             <div class="ita-printer-panel" id="ita-printer-panel">
               <div class="ita-tb-row">
