@@ -1003,6 +1003,23 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     if (attachBtn) attachBtn.style.background = "";
   }
 
+  function _itaResizeNotifImg(dataURL, cb) {
+    const img = new Image();
+    img.onload = function() {
+      const MAX = 800;
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w >= h) { h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      cb(c.toDataURL("image/jpeg", 0.82).split(",")[1]);
+    };
+    img.src = dataURL;
+  }
+
   function itaNotifImgChange(input) {
     const file = input.files[0];
     const attachBtn = document.getElementById("ita-btn-img-attach");
@@ -1016,8 +1033,10 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     if (imgName) imgName.textContent = file.name;
     const reader = new FileReader();
     reader.onload = function(e) {
-      _itaNotifImgB64 = e.target.result.split(",")[1];
-      if (attachBtn) attachBtn.style.background = "#78350f";
+      _itaResizeNotifImg(e.target.result, function(b64) {
+        _itaNotifImgB64 = b64;
+        if (attachBtn) attachBtn.style.background = "#78350f";
+      });
     };
     reader.readAsDataURL(file);
   }
@@ -1817,11 +1836,13 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
             if (!file) return;
             const reader = new FileReader();
             reader.onload = function(ev) {
-              _itaNotifImgB64 = ev.target.result.split(",")[1];
-              const imgName = document.getElementById("ita-notif-img-name");
-              if (imgName) imgName.textContent = "📷 Ảnh đã dán";
-              const attachBtn = document.getElementById("ita-btn-img-attach");
-              if (attachBtn) attachBtn.style.background = "#78350f";
+              _itaResizeNotifImg(ev.target.result, function(b64) {
+                _itaNotifImgB64 = b64;
+                const imgName = document.getElementById("ita-notif-img-name");
+                if (imgName) imgName.textContent = "📷 Ảnh đã dán";
+                const attachBtn = document.getElementById("ita-btn-img-attach");
+                if (attachBtn) attachBtn.style.background = "#78350f";
+              });
             };
             reader.readAsDataURL(file);
             break;
