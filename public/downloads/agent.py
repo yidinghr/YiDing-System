@@ -72,14 +72,22 @@ async def _ensure_aumid():
     if _aumid_ok:
         return
 
-    # Prefer ICO (proper Windows shortcut icon) → fallback PNG
-    logo = BASE_DIR / "yiding_logo.ico"
-    if not logo.exists():
-        logo = BASE_DIR / "yiding_logo.png"
-    icon_ps = (
-        f'$s.IconLocation="{str(logo)},0"'
-        if logo.exists() else ""
-    )
+    # Ensure yiding_logo.ico is a real ICO (not PNG renamed). Auto-convert if needed.
+    ico_path = BASE_DIR / "yiding_logo.ico"
+    png_path = BASE_DIR / "yiding_logo.png"
+    try:
+        ico_bytes = ico_path.read_bytes() if ico_path.exists() else b""
+        if ico_bytes[:4] != b'\x00\x00\x01\x00':          # not a valid ICO header
+            src = png_path if png_path.exists() else (ico_path if ico_path.exists() else None)
+            if src:
+                from PIL import Image
+                img = Image.open(src).convert("RGBA")
+                img.save(str(ico_path), format="ICO", sizes=[(16,16),(32,32),(48,48),(64,64)])
+    except Exception:
+        pass
+
+    logo = ico_path if ico_path.exists() else (png_path if png_path.exists() else None)
+    icon_ps = f'$s.IconLocation="{str(logo)},0"' if logo else ""
 
     script = f"""
 Add-Type -TypeDefinition @'
