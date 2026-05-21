@@ -19,7 +19,7 @@ if %errorLevel% neq 0 (
 
 set INSTALL_DIR=C:\YiDingHrAgent
 set AGENT_URL=https://yidinginternational.com/downloads/agent.py
-set LOGO_URL=https://yidinginternational.com/downloads/yiding_logo.ico
+set LOGO_URL=https://yidinginternational.com/downloads/yiding_logo.png
 
 :: ── Mode 1: Co EXE san - deploy khong can Python ────────────────────────────
 if exist "%~dp0YiDingITAgent.exe" (
@@ -131,6 +131,12 @@ if not exist "!PYTHON_W!" set "PYTHON_W=!PYTHON_EXE!"
 
 for /f "tokens=*" %%v in ('"!PYTHON_EXE!" --version 2^>^&1') do echo  OK: %%v
 
+:: Dung agent cu truoc khi xoa thu muc (tranh file bị lock)
+echo  [*] Dung agent cu neu dang chay...
+taskkill /f /im pythonw.exe >nul 2>&1
+taskkill /f /im YiDingITAgent.exe >nul 2>&1
+timeout /t 3 /nobreak >nul
+
 :: [2/5] Tao thu muc va tai agent.py
 echo  [2/5] Chuan bi thu muc va tai agent...
 if exist "%INSTALL_DIR%" rmdir /s /q "%INSTALL_DIR%"
@@ -155,8 +161,8 @@ if !DOWNLOAD_OK! equ 0 (
 echo  OK - agent.py da san sang
 
 echo  [*] Dang tai logo cong ty...
-powershell -Command "try { Invoke-WebRequest -Uri '%LOGO_URL%' -OutFile '%INSTALL_DIR%\yiding_logo.ico' -UseBasicParsing -TimeoutSec 15 } catch {}" >nul 2>&1
-if exist "%INSTALL_DIR%\yiding_logo.ico" (
+powershell -Command "try { Invoke-WebRequest -Uri '%LOGO_URL%' -OutFile '%INSTALL_DIR%\yiding_logo.png' -UseBasicParsing -TimeoutSec 15 } catch {}" >nul 2>&1
+if exist "%INSTALL_DIR%\yiding_logo.png" (
     echo  OK - logo da san sang
 ) else (
     echo  [CANH BAO] Khong tai duoc logo, se dung icon mac dinh.
