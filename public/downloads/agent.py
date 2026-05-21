@@ -157,11 +157,18 @@ async def act_screenshot():
     if not HAS_MSS:
         return "Error: mss not installed"
     def _shot():
-        tmp = BASE_DIR / "_shot.png"
+        import io
+        from PIL import Image
         with mss.mss() as sct:
-            sct.shot(output=str(tmp))
-        data = tmp.read_bytes(); tmp.unlink(missing_ok=True)
-        return base64.b64encode(data).decode()
+            raw = sct.grab(sct.monitors[0])
+            img = Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+        # Resize if wider than 1280px, then JPEG compress
+        if img.width > 1280:
+            h = int(img.height * 1280 / img.width)
+            img = img.resize((1280, h), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=82)
+        return base64.b64encode(buf.getvalue()).decode()
     return await asyncio.to_thread(_shot)
 
 async def act_list_dir(path):
