@@ -87,63 +87,124 @@ public class AumidHelper {
 }
 """
 
+async def _compile_launcher_exe(ico_path: Path, exe_out: Path):
+    """Compile YiDingITAgent.exe with embedded YiDing ICO for notification attribution icon."""
+    csc_candidates = [
+        r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
+        r"C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe",
+    ]
+    csc = next((p for p in csc_candidates if Path(p).exists()), None)
+    if not csc:
+        return
+    cs_code = (
+        "using System; using System.Diagnostics; using System.IO;\n"
+        "class YiDingITAgent {\n"
+        "    [STAThread] static void Main() {\n"
+        "        string d = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);\n"
+        "        string py = Path.Combine(d, \"venv\", \"Scripts\", \"pythonw.exe\");\n"
+        "        string sc = Path.Combine(d, \"agent.py\");\n"
+        "        if (!File.Exists(py)) return;\n"
+        "        Process.Start(new ProcessStartInfo {\n"
+        "            FileName = py, Arguments = \"\\\"\" + sc + \"\\\"\",\n"
+        "            WorkingDirectory = d, UseShellExecute = false });\n"
+        "    }\n"
+        "}\n"
+    )
+    import tempfile
+    fd, cs_file = tempfile.mkstemp(suffix=".cs")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(cs_code)
+        cmd = [csc, "/target:winexe", f"/out:{exe_out}"]
+        if ico_path.exists():
+            cmd.append(f"/win32icon:{ico_path}")
+        cmd.append(cs_file)
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = 0
+        await asyncio.to_thread(
+            subprocess.run, cmd, capture_output=True, timeout=30,
+            startupinfo=si, creationflags=subprocess.CREATE_NO_WINDOW
+        )
+    except Exception:
+        pass
+    finally:
+        try: Path(cs_file).unlink()
+        except Exception: pass
+
+
 async def _ensure_aumid():
     global _aumid_ok
     if _aumid_ok:
         return
 
-    # Ensure yiding_logo.ico is a real ICO (not PNG renamed). Auto-convert if needed.
     ico_path = BASE_DIR / "yiding_logo.ico"
     png_path = BASE_DIR / "yiding_logo.png"
+
+    # Rebuild ICO from PNG: square-pad + remove black background + proper sizes
     try:
-        ico_bytes = ico_path.read_bytes() if ico_path.exists() else b""
-        if ico_bytes[:4] != b'\x00\x00\x01\x00':          # not a valid ICO header
-            src = png_path if png_path.exists() else (ico_path if ico_path.exists() else None)
-            if src:
-                from PIL import Image
-                img = Image.open(src).convert("RGBA")
-                img.save(str(ico_path), format="ICO", sizes=[(16,16),(32,32),(48,48),(64,64)])
+        src = png_path if png_path.exists() else None
+        if src:
+            from PIL import Image
+            img = Image.open(src).convert("RGBA")
+            side = max(img.width, img.height)
+            sq = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+            sq.paste(img, ((side - img.width) // 2, (side - img.height) // 2))
+            # Remove near-black background pixels
+            pixels = list(sq.getdata())
+            sq.putdata([(r, g, b, 0) if r + g + b < 60 else (r, g, b, a)
+                        for r, g, b, a in pixels])
+            sq.save(str(ico_path), format="ICO",
+                    sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (256, 256)])
     except Exception:
         pass
 
-    logo = ico_path if ico_path.exists() else (png_path if png_path.exists() else None)
-    icon_ps = f'$s.IconLocation="{str(logo)},0"' if logo else ""
-    exe_path = str(Path(sys.executable))   # pythonw.exe, passed explicitly to avoid subprocess returning powershell.exe
+    # Compile wrapper EXE with icon embedded (for notification attribution icon)
+    launcher_exe = BASE_DIR / "YiDingITAgent.exe"
+    if not launcher_exe.exists():
+        await _compile_launcher_exe(ico_path, launcher_exe)
+
+    # Shortcut target: wrapper EXE (icon embedded) preferred; fallback to pythonw.exe
+    if launcher_exe.exists():
+        target = str(launcher_exe)
+        icon_ps = ""
+        args_ps = ""
+    else:
+        target = str(Path(sys.executable))
+        icon_ps = f'$s.IconLocation="{str(ico_path)},0";' if ico_path.exists() else ""
+        args_ps = f'$s.Arguments=\'{str(BASE_DIR / "agent.py")}\';'
 
     script = f"""
 Add-Type -TypeDefinition @'
 {_AUMID_CS}
 '@ -ErrorAction SilentlyContinue
 
-$appId = 'YiDing.ITAgent'
+$appId   = 'YiDing.ITAgent'
 $lnkDir  = [IO.Path]::Combine($env:APPDATA,'Microsoft\\Windows\\Start Menu\\Programs')
 $lnkPath = [IO.Path]::Combine($lnkDir,'YiDing IT Agent.lnk')
-
-# Delete stale shortcut so Windows refreshes icon cache
 if (Test-Path $lnkPath) {{ Remove-Item $lnkPath -Force }}
 
-# Create shortcut with correct pythonw.exe target
 $ws = New-Object -ComObject WScript.Shell
 $s  = $ws.CreateShortcut($lnkPath)
-$s.TargetPath   = '{exe_path}'
-$s.Description  = 'YiDing IT Agent'
+$s.TargetPath      = '{target}'
+$s.WorkingDirectory= '{str(BASE_DIR)}'
+$s.Description     = 'YiDing IT Agent'
 {icon_ps}
+{args_ps}
 $s.Save()
 
-# Stamp AppUserModelId property on the .lnk file
 [AumidHelper]::SetLnkAppId($lnkPath, $appId) | Out-Null
 
-# Notify shell to refresh icon cache
 $sig = '[DllImport("shell32.dll")]public static extern void SHChangeNotify(int e,int f,IntPtr a,IntPtr b);'
-Add-Type -MemberDefinition $sig -Name WinShell -Namespace Win32 -ErrorAction SilentlyContinue
-[Win32.WinShell]::SHChangeNotify(0x08000000,0,[IntPtr]::Zero,[IntPtr]::Zero)
+Add-Type -MemberDefinition $sig -Name WinShellNotify -Namespace Win32 -ErrorAction SilentlyContinue
+[Win32.WinShellNotify]::SHChangeNotify(0x08000000,0,[IntPtr]::Zero,[IntPtr]::Zero)
 
-# Also write registry DisplayName (belt + suspenders)
 $rp = "HKCU:\\SOFTWARE\\Classes\\AppUserModelId\\$appId"
 if(-not(Test-Path $rp)){{New-Item $rp -Force|Out-Null}}
 Set-ItemProperty $rp -Name 'DisplayName' -Value 'YiDing IT Agent'
+Set-ItemProperty $rp -Name 'IconUri'     -Value '{str(ico_path)}'
 """
-    await act_powershell(script, timeout=20)
+    await act_powershell(script, timeout=30)
     _aumid_ok = True
 
 # ── Actions ────────────────────────────────────────────────────────────────
