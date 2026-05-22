@@ -811,6 +811,18 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
         itaUpdateDetail();
       } else if (d.type === "result") {
         itaShowResult(d);
+      } else if (d.type === "settings") {
+        // Đồng bộ admin settings từ VPS
+        const s = d.data || {};
+        if (s.itaAvatarURL !== undefined && s.itaAvatarURL !== itaAvatarURL) {
+          itaAvatarURL = s.itaAvatarURL || null;
+          localStorage.setItem("itaAvatarURL", itaAvatarURL || "");
+          itaSetAvUI();
+        }
+        if (s.itaSenderName !== undefined && s.itaSenderName !== itaSenderName) {
+          itaSenderName = s.itaSenderName;
+          localStorage.setItem("itaSenderName", itaSenderName);
+        }
       }
     };
   }
@@ -1123,6 +1135,9 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
         localStorage.setItem("itaAvatarURL", itaAvatarURL);
         itaSetAvUI();
         itaPushAvAll();
+        // Lưu avatar lên VPS để đồng bộ tất cả máy
+        if (itaWS && itaWS.readyState === 1)
+          itaWS.send(JSON.stringify({ type: "save_settings", key: "itaAvatarURL", value: itaAvatarURL }));
       };
       img.src = e.target.result;
     };
@@ -1169,7 +1184,13 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 
   function itaSaveName() {
     const v = document.getElementById("ita-name-inp");
-    if (v && v.value.trim()) { itaSenderName = v.value.trim(); localStorage.setItem("itaSenderName", itaSenderName); }
+    if (v && v.value.trim()) {
+      itaSenderName = v.value.trim();
+      localStorage.setItem("itaSenderName", itaSenderName);
+      // Lưu sender name lên VPS để đồng bộ tất cả máy
+      if (itaWS && itaWS.readyState === 1)
+        itaWS.send(JSON.stringify({ type: "save_settings", key: "itaSenderName", value: itaSenderName }));
+    }
     itaResetName();
   }
 
