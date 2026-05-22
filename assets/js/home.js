@@ -742,8 +742,8 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     salaryEditSaved: "Shift rules saved."
   });
   const menuConfigs = [
-    { id: "employees", labelKey: "menuEmployees", icon: "👥", adminOnly: true },
-    { id: "schedule", labelKey: "menuSchedule", icon: "🗓", adminOnly: true },
+    { id: "employees", labelKey: "menuEmployees", icon: "👥" },
+    { id: "schedule", labelKey: "menuSchedule", icon: "🗓" },
     { id: "operationTraining", labelKey: "menuTraining", icon: "🎯" },
     { id: "pdfMaker", labelKey: "menuPdf", icon: "PDF", adminOnly: true },
     { id: "chiChi", labelKey: "menuChiChi", icon: "💬", adminOnly: true },
@@ -1637,7 +1637,7 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     });
 
     if (!buttons.some(function (item) { return item.id === uiState.activeTab; })) {
-      uiState.activeTab = authStore.isAdmin(currentAccount) ? "accounts" : "operationTraining";
+      uiState.activeTab = authStore.isAdmin(currentAccount) ? "accounts" : "employees";
     }
 
     homeMenu.setAttribute("aria-label", i18n.t("home.menuAria"));
@@ -2116,6 +2116,52 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
   }
 
   function renderSalaryPanel() {
+    if (uiState.salaryEditing) {
+      return '<div class="dashboard-salary-stage">' + renderSalaryShiftEditor() + "</div>";
+    }
+
+    const shiftDefinitions = getSalaryShiftDefinitions();
+    const shiftOptions = shiftDefinitions.map(function (shift) {
+      const nightHours = getSalaryNightHours(shift.code);
+      const selected = shift.code === uiState.salaryShiftCode ? " selected" : "";
+      return '<option value="' + escapeHtml(shift.code) + '"' + selected + ">" +
+        escapeHtml(shift.code + " · " + shift.start + "–" + shift.end + " / " + String(nightHours) + "h " + t("salaryShiftWindow")) +
+        "</option>";
+    }).join("");
+
+    const result = uiState.salaryResult;
+    const rules = getSalaryMonthRules(new Date());
+
+    return [
+      '<div class="dashboard-salary-stage">',
+      '<div class="dashboard-salary-tool-row">',
+      '<form id="dashboardSalaryForm" class="dashboard-salary-board" autocomplete="off">',
+      '<div class="dashboard-salary-field">',
+      "<label>" + escapeHtml(t("salaryMonthlyLabel")) + "</label>",
+      '<input class="dashboard-salary-input" name="monthlySalary" type="text" inputmode="decimal" placeholder="20.000.000" value="' + escapeHtml(uiState.salaryMonthlyInput || "") + '">',
+      "</div>",
+      '<div class="dashboard-salary-field">',
+      "<label>" + escapeHtml(t("salaryShiftLabel")) + "</label>",
+      '<select class="dashboard-salary-select" name="shiftCode">' + shiftOptions + "</select>",
+      "</div>",
+      '<div class="dashboard-salary-field dashboard-salary-field--result">',
+      "<label>" + escapeHtml(t("salaryAllowance")) + "</label>",
+      '<input class="dashboard-salary-output" name="salaryResult" readonly tabindex="-1" value="' + escapeHtml(result ? formatCurrency(result.allowance) : "") + '">',
+      "</div>",
+      '<p class="dashboard-salary-error" data-salary-feedback>' + escapeHtml(uiState.salaryFeedback || "") + "</p>",
+      '<div class="dashboard-salary-metrics">',
+      renderSalaryMetric("hourly", t("salaryHourly"), result ? formatCurrency(result.hourlySalary) : "--"),
+      renderSalaryMetric("nightHours", t("salaryNightHours"), result ? formatHours(result.nightHours) : "--"),
+      renderSalaryMetric("workingDays", t("salaryWorkingDays"), result ? String(result.workingDays) : String(rules.workingDays)),
+      "</div>",
+      "</form>",
+      '<button type="button" class="dashboard-salary-edit-button" data-salary-action="edit">' + escapeHtml(t("salaryEdit")) + "</button>",
+      "</div>",
+      "</div>"
+    ].join("");
+  }
+
+  function renderSalaryBoardPanel() {
     const monthKey = uiState.salaryTableMonthKey;
     const monthOptions = buildSalaryMonthOptions();
     const rows = getSalaryTableRows(monthKey);
@@ -3588,7 +3634,7 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     if (stored) {
       return stored;
     }
-    return authStore.isAdmin(account) ? "accounts" : "operationTraining";
+    return authStore.isAdmin(account) ? "accounts" : "employees";
   }
 
   function storeActiveTab(account, nextTab) {
