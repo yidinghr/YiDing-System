@@ -196,17 +196,40 @@ echo  OK
 
 :: [5/5] Dang ky khoi dong tu dong
 echo  [5/5] Dang ky khoi dong cung Windows...
+
+:: Registry Run key (du phong)
 reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" /v "YiDingITAgent" /t REG_SZ /d "\"%INSTALL_DIR%\venv\Scripts\pythonw.exe\" \"%INSTALL_DIR%\agent.py\"" /f >nul
-if %errorLevel% neq 0 (
-    echo  [CANH BAO] Khong dang ky duoc startup. Agent se khong tu chay khi khoi dong may.
+
+:: Scheduled Task (chinh - hoat dong sau khi ngu/thuc may)
+schtasks /delete /tn "YiDingHrAIAgent" /f >nul 2>&1
+schtasks /create /tn "YiDingHrAIAgent" /tr "\"%INSTALL_DIR%\venv\Scripts\pythonw.exe\" \"%INSTALL_DIR%\agent.py\"" /sc onlogon /rl highest /f >nul 2>&1
+if %errorLevel% equ 0 (
+    :: Bat tuong thich sleep: StartWhenAvailable + khong dung pin, cho chay tren battery
+    powershell -Command ^
+      "$s=(Get-ScheduledTask -TaskName 'YiDingHrAIAgent').Settings;^
+       $s.StartWhenAvailable=$true;$s.DisallowStartIfOnBatteries=$false;^
+       $s.StopIfGoingOnBatteries=$false;$s.ExecutionTimeLimit='PT0S';^
+       $s.RestartCount=999;$s.RestartInterval='PT1M';^
+       Set-ScheduledTask -TaskName 'YiDingHrAIAgent' -Settings $s" >nul 2>&1
+    echo  OK - Scheduled Task da duoc cau hinh
 ) else (
-    echo  OK - Agent se tu chay khi dang nhap
+    echo  [CANH BAO] Khong tao duoc Scheduled Task. Agent van tu chay qua registry.
 )
+
+:: Cai dat power settings: cam dien khong sleep, WiFi luon bat
+echo  [*] Cau hinh power settings (cam dien khong sleep)...
+powercfg /change standby-timeout-ac 0 >nul 2>&1
+powercfg /change hibernate-timeout-ac 0 >nul 2>&1
+powershell -Command ^
+  "$w=Get-NetAdapter -Name 'Wi-Fi' -EA SilentlyContinue;^
+   if($w){Disable-NetAdapterPowerManagement -Name $w.Name -EA SilentlyContinue}" >nul 2>&1
+echo  OK - Cam dien: khong tu sleep, WiFi luon hoat dong
 
 :: Khoi dong agent ngay
 echo.
 echo  Dang khoi dong agent...
 taskkill /f /im pythonw.exe >nul 2>&1
+timeout /t 2 /nobreak >nul
 start "" /B "%INSTALL_DIR%\venv\Scripts\pythonw.exe" "%INSTALL_DIR%\agent.py"
 
 :done
@@ -216,6 +239,7 @@ echo   Cai dat hoan tat!
 echo  ================================
 echo   Agent dang chay nen
 echo   Tu dong khoi dong khi dang nhap
+echo   Khi cam dien: khong tu sleep
 echo   Log: %INSTALL_DIR%\agent.log
 echo  ================================
 echo.

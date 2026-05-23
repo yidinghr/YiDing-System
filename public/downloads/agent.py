@@ -642,6 +642,108 @@ async def act_read_whatsapp_db(date_from=None, date_to=None):
     }, ensure_ascii=False, indent=2)
 
 
+async def act_print_data(data: str, filename: str = "document.pdf", mime: str = ""):
+    """Nhận file base64, lưu tạm rồi in."""
+    import tempfile, base64 as _b64
+    try:
+        raw = _b64.b64decode(data)
+        ext = Path(filename).suffix or ".pdf"
+        tmp = Path(tempfile.mktemp(suffix=ext, dir=BASE_DIR))
+        tmp.write_bytes(raw)
+        result = await act_print_file(str(tmp))
+        try: tmp.unlink(missing_ok=True)
+        except: pass
+        return result if result else f"Print job sent: {filename}"
+    except Exception as e:
+        return f"Error: {e}"
+
+# ── WiFi actions ───────────────────────────────────────────────────────────
+async def act_wifi_list():
+    """Liệt kê WiFi hiện tại và các profile đã lưu."""
+    r = await act_powershell(
+        "$cur=(netsh wlan show interfaces | Select-String '^ *SSID' | Select-Object -First 1)"
+        ".ToString().Split(':',2)[1].Trim();"
+        "$profiles=@(netsh wlan show profiles | Select-String 'All User Profile'"
+        " | ForEach-Object { $_.ToString().Split(':',2)[1].Trim() });"
+        "\"Current: $cur\"; \"---\"; $profiles",
+        timeout=10
+    )
+    return r.strip() or "Không có WiFi info"
+
+async def act_wifi_connect(ssid: str):
+    """Kết nối tới WiFi profile đã lưu theo tên SSID."""
+    if not ssid:
+        return "Error: ssid required"
+    r = await act_powershell(f"netsh wlan connect name='{ssid.replace(chr(39),'')}' ", timeout=15)
+    return r.strip()
+
+async def act_wifi_print(target_wifi: str, file_data: str = "", file_path: str = "",
+                         filename: str = "document.pdf", printer: str = ""):
+    """Đổi WiFi → in file → đổi lại WiFi cũ → toast xác nhận.
+    Dùng khi máy in và máy tính ở khác wifi.
+    Kết quả báo qua Windows notification vì WebSocket tạm ngắt lúc đổi WiFi.
+    """
+    if not target_wifi:
+        return "Error: target_wifi required"
+    if not file_data and not file_path:
+        return "Error: cần file_data (base64) hoặc file_path"
+
+    # Lưu WiFi hiện tại để quay về
+    cur = await act_powershell(
+        "(netsh wlan show interfaces | Select-String '^ *SSID' | Select-Object -First 1)"
+        ".ToString().Split(':',2)[1].Trim()",
+        timeout=8
+    )
+    original_wifi = cur.strip()
+    safe_target   = target_wifi.replace("'", "")
+    safe_orig     = original_wifi.replace("'", "")
+    log.info(f"wifi_print: '{original_wifi}' → '{target_wifi}'")
+
+    # Đổi sang WiFi máy in
+    await act_powershell(f"netsh wlan connect name='{safe_target}'", timeout=15)
+
+    # Đợi kết nối (tối đa 20s)
+    connected = False
+    for _ in range(10):
+        await asyncio.sleep(2)
+        chk = await act_powershell(
+            "(netsh wlan show interfaces | Select-String '^ *SSID' | Select-Object -First 1)"
+            ".ToString().Split(':',2)[1].Trim()",
+            timeout=6
+        )
+        if safe_target.lower() in chk.strip().lower():
+            connected = True
+            break
+
+    if not connected:
+        if safe_orig:
+            await act_powershell(f"netsh wlan connect name='{safe_orig}'", timeout=15)
+        msg = f"Không kết nối được '{target_wifi}' sau 20s"
+        await act_send_notification("🖨 YiDing Print", msg)
+        return f"Error: {msg}"
+
+    # In file
+    if file_data:
+        print_result = await act_print_data(file_data, filename)
+    else:
+        print_result = await act_print_file(file_path, printer)
+
+    await asyncio.sleep(3)  # đợi lệnh vào print queue
+
+    # Quay lại WiFi cũ
+    if safe_orig and safe_orig.lower() != safe_target.lower():
+        await act_powershell(f"netsh wlan connect name='{safe_orig}'", timeout=15)
+        log.info(f"wifi_print: back to '{original_wifi}'")
+
+    # Toast xác nhận (WebSocket có thể ngắt tạm khi đổi WiFi)
+    ok = "Error" not in (print_result or "")
+    await act_send_notification(
+        "🖨 In xong" if ok else "🖨 Lỗi in",
+        f"{filename}" if ok else print_result[:120]
+    )
+    log.info(f"wifi_print done: {print_result}")
+    return print_result
+
 ACTIONS = {
     "system_info":          lambda p: act_system_info(),
     "screenshot":           lambda p: act_screenshot(),
@@ -661,7 +763,14 @@ ACTIONS = {
     "set_default_printer":  lambda p: act_set_default_printer(p.get("name", "")),
     "install_printer_ip":   lambda p: act_install_printer_ip(p.get("ip",""), p.get("name",""), p.get("driver","Generic / Text Only")),
     "print_file":           lambda p: act_print_file(p.get("path",""), p.get("printer","")),
+    "print_data":           lambda p: act_print_data(p.get("data",""), p.get("filename","document.pdf"), p.get("mime","")),
     "read_whatsapp_db":     lambda p: act_read_whatsapp_db(p.get("date_from"), p.get("date_to")),
+    "wifi_list":            lambda p: act_wifi_list(),
+    "wifi_connect":         lambda p: act_wifi_connect(p.get("ssid","")),
+    "wifi_print":           lambda p: act_wifi_print(
+                                p.get("target_wifi",""), p.get("file_data",""),
+                                p.get("file_path",""),   p.get("filename","document.pdf"),
+                                p.get("printer","")),
 }
 
 async def handle_command(ws, data):

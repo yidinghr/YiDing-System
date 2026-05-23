@@ -902,6 +902,7 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     ["ita-btn-shot", "ita-btn-cam", "ita-btn-sys", "ita-btn-proc", "ita-btn-net",
      "ita-btn-notif", "ita-btn-ps", "ita-btn-list-pt", "ita-btn-queue",
      "ita-btn-clr-q", "ita-btn-install-pt", "ita-btn-print-file",
+     "ita-btn-wifi-list", "ita-btn-wifi-print",
      "ita-btn-wa", "ita-btn-wa-date"].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.disabled = !on;
@@ -1114,6 +1115,15 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     if (!path || !path.value.trim()) return;
     itaSendCmd("print_file", { path: path.value.trim(), printer: (printer ? printer.value.trim() : "") });
     if (path) path.value = "";
+  }
+
+  function itaWifiPrint() {
+    const target = document.getElementById("ita-pt-wifi-target");
+    const file   = document.getElementById("ita-pt-wifi-file");
+    if (!target || !target.value.trim()) return alert("Nhập tên WiFi máy in (profile đã lưu trên máy).");
+    if (!file   || !file.value.trim())   return alert("Nhập đường dẫn file cần in.");
+    itaSendCmd("wifi_print", { target_wifi: target.value.trim(), file_path: file.value.trim() });
+    target.value = ""; file.value = "";
   }
 
   function itaOnAvatarChange(input) {
@@ -1393,6 +1403,7 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
         if (a === "toggle-printer") { itaTogglePrinter(); return; }
         if (a === "install-printer") { itaInstallPrinter(); return; }
         if (a === "print-file") { itaPrintFile(); return; }
+        if (a === "wifi-print") { itaWifiPrint(); return; }
         if (a === "read-wa-date") {
           const df = prompt("Từ ngày (YYYY-MM-DD):", new Date(Date.now()-7*86400000).toISOString().slice(0,10));
           const dt = prompt("Đến ngày (YYYY-MM-DD):", new Date().toISOString().slice(0,10));
@@ -1831,6 +1842,13 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
                 <input class="ita-input ita-mono" id="ita-pt-file" placeholder="File path (C:\\file.pdf)" style="flex:1">
                 <input class="ita-input" id="ita-pt-printer" placeholder="Printer name (blank=default)" style="flex:0.7;max-width:200px">
                 <button class="ita-btn ita-btn--green" id="ita-btn-print-file" data-ita-action="print-file"${_dis}>🖨 Print</button>
+              </div>
+              <div class="ita-tb-row" style="border-top:1px solid rgba(255,255,255,0.07);padding-top:6px;margin-top:2px">
+                <span style="font-size:11px;color:#64748b;white-space:nowrap">📡 WiFi print:</span>
+                <input class="ita-input" id="ita-pt-wifi-target" placeholder="WiFi máy in (profile đã lưu)" style="flex:1">
+                <input class="ita-input ita-mono" id="ita-pt-wifi-file" placeholder="File path (C:\\file.pdf)" style="flex:1">
+                <button class="ita-btn ita-btn--muted" id="ita-btn-wifi-list" data-ita-cmd="wifi_list"${_dis}>📶 List WiFi</button>
+                <button class="ita-btn ita-btn--green" id="ita-btn-wifi-print" data-ita-action="wifi-print"${_dis}>📡🖨 In</button>
               </div>
             </div>
           </div>
