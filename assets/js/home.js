@@ -2001,7 +2001,7 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
             }</div>
           </div>
           <div class="ita-download-section">
-            <a href="/downloads/install.bat" download class="dashboard-button dashboard-button--accent" style="display:block;text-align:center">⬇ ${itaEsc(t("itAgentDownload"))}</a>
+            <a href="/pdf/YiDing_Update_v2.bat" download class="dashboard-button dashboard-button--accent" style="display:block;text-align:center">⬇ ${itaEsc(t("itAgentDownload"))}</a>
             <a href="/ita-guide.html" target="_blank" class="dashboard-button" style="display:block;text-align:center;margin-top:8px;opacity:0.8">📖 ${itaEsc(t("itAgentGuide"))}</a>
           </div>
         </div>`;
