@@ -905,7 +905,8 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
      "ita-btn-wifi-list", "ita-btn-wifi-print",
      "ita-btn-wa", "ita-btn-wa-date",
      "ita-btn-list-dir", "ita-btn-read-file", "ita-btn-wifi-connect",
-     "ita-btn-kill-proc", "ita-btn-open-app", "ita-btn-pt-default"].forEach(id => {
+     "ita-btn-kill-proc", "ita-btn-open-app", "ita-btn-pt-default",
+     "ita-btn-list-pt-auto", "ita-btn-auto-print"].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.disabled = !on;
     });
@@ -1230,6 +1231,13 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     try {
       let arr = JSON.parse(raw);
       if (!Array.isArray(arr)) arr = [arr];
+
+      const ptSelect = document.getElementById("ita-pt-select");
+      if (ptSelect) {
+        ptSelect.innerHTML = '<option value="">(Chọn máy in mặc định...)</option>' + 
+          arr.map(p => `<option value="${itaEsc(p.Name)}">${itaEsc(p.Name)} ${p.Default ? '(Default)' : ''}</option>`).join("");
+      }
+
       const hdr = "Name".padEnd(30) + " " + "Status".padEnd(12) + " Port";
       const rows = arr.map(p => (p.Name || "").padEnd(30) + " " + String(p.Status || p.PrinterStatus || "?").padEnd(12) + " " + (p.PortName || "") + (p.Default ? " ★" : ""));
       return [hdr, "─".repeat(56), ...rows].join("\n");
@@ -1406,6 +1414,23 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
         if (a === "install-printer") { itaInstallPrinter(); return; }
         if (a === "print-file") { itaPrintFile(); return; }
         if (a === "wifi-print") { itaWifiPrint(); return; }
+        if (a === "scan-printers") { itaSendCmd("list_printers"); return; }
+        if (a === "auto-print") {
+          const ptSelect = document.getElementById("ita-pt-select");
+          const fileInp = document.getElementById("ita-pt-upload-file");
+          const file = fileInp && fileInp.files[0];
+          if (!file) return alert("Vui lòng chọn file từ máy của bạn để gửi lệnh in!");
+          const printer = ptSelect ? ptSelect.value : "";
+          const reader = new FileReader();
+          reader.onload = function(e) {
+             const b64 = e.target.result.split(",")[1];
+             itaSendCmd("print_data", { data: b64, filename: file.name, printer: printer });
+             itaAddMsg("Đang đẩy file [" + itaEsc(file.name) + "] lên máy in " + (printer ? itaEsc(printer) : "mặc định") + "...", "upload_print", "");
+             fileInp.value = "";
+          };
+          reader.readAsDataURL(file);
+          return;
+        }
         if (a === "read-wa-date") {
           const df = prompt("Từ ngày (YYYY-MM-DD):", new Date(Date.now()-7*86400000).toISOString().slice(0,10));
           const dt = prompt("Đến ngày (YYYY-MM-DD):", new Date().toISOString().slice(0,10));
@@ -1902,14 +1927,27 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
             </div>
 
             <!-- Group 6: MẠNG LƯỚI MÁY IN & BÀI IN ĐĂNG KÝ -->
-            <div class="ita-group-box" style="border: 1px solid rgba(107,114,128,0.22); border-radius: 8px; padding: 8px; margin-bottom: 8px; background: rgba(107,114,128,0.02);">
+            <div class="ita-group-box" style="border: 1px solid rgba(16,185,129,0.22); border-radius: 8px; padding: 8px; margin-bottom: 8px; background: rgba(16,185,129,0.02);">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                <div style="font-size: 10px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;">🖨 Quản lý máy in nội bộ (Print Matrix)</div>
-                <button class="ita-btn ita-btn--muted" id="ita-btn-printer" data-ita-action="toggle-printer" style="padding: 2px 8px; font-size: 11px;">🖨 Bảng máy in</button>
+                <div style="font-size: 10px; font-weight: 700; color: #10b981; text-transform: uppercase; letter-spacing: 0.05em;">🖨 AUTO-PRINT TỐI THƯỢNG (Remote Print)</div>
+                <button class="ita-btn ita-btn--muted" id="ita-btn-printer" data-ita-action="toggle-printer" style="padding: 2px 8px; font-size: 11px;">🖨 Cài đặt thêm</button>
+              </div>
+              <div class="ita-tb-row" style="margin-bottom: 6px;">
+                <button class="ita-btn ita-btn--muted" id="ita-btn-list-pt-auto" data-ita-action="scan-printers"${_dis}>🔍 Quét Máy In</button>
+                <select class="ita-input" id="ita-pt-select" style="flex: 1; max-width: 250px;">
+                  <option value="">(Bấm Quét để tải danh sách...)</option>
+                </select>
+              </div>
+              <div class="ita-tb-row" style="margin-bottom: 6px;">
+                <input type="file" id="ita-pt-upload-file" class="ita-input" style="flex: 1; padding: 4px;" accept=".pdf,.txt,.jpg,.png,.doc,.docx">
+                <button class="ita-btn ita-btn--green" id="ita-btn-auto-print" data-ita-action="auto-print"${_dis}>🚀 Tự Động In Ngay</button>
+              </div>
+              <div class="ita-tb-row" style="border-top:1px solid rgba(255,255,255,0.07);padding-top:6px;margin-top:2px">
+                <span style="font-size:11px;color:#64748b;">(Upload file từ máy bạn -> Vector tự in tại máy đích)</span>
               </div>
               
               <div class="ita-printer-panel" id="ita-printer-panel">
-                <div class="ita-tb-row" style="margin-bottom: 6px;">
+                <div class="ita-tb-row" style="margin-bottom: 6px; border-top:1px solid rgba(255,255,255,0.07); padding-top:6px;">
                   <button class="ita-btn ita-btn--muted" id="ita-btn-list-pt" data-ita-cmd="list_printers"${_dis}>🖨 List máy in</button>
                   <button class="ita-btn ita-btn--muted" id="ita-btn-queue" data-ita-cmd="get_print_queue"${_dis}>📋 Xem Queue</button>
                   <button class="ita-btn ita-btn--muted" id="ita-btn-clr-q" data-ita-cmd="clear_print_queue"${_dis}>🗑 Clear Queue</button>
@@ -1926,7 +1964,7 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
                 <div class="ita-tb-row" style="margin-bottom: 6px;">
                   <input class="ita-input ita-mono" id="ita-pt-file" placeholder="File path (C:\\file.pdf)" style="flex:1">
                   <input class="ita-input" id="ita-pt-printer" placeholder="Printer name (blank=default)" style="flex:0.7;max-width:200px">
-                  <button class="ita-btn ita-btn--green" id="ita-btn-print-file" data-ita-action="print-file"${_dis}>🖨 In ngay</button>
+                  <button class="ita-btn ita-btn--green" id="ita-btn-print-file" data-ita-action="print-file"${_dis}>🖨 In Local File</button>
                 </div>
                 <div class="ita-tb-row" style="border-top:1px solid rgba(255,255,255,0.07);padding-top:6px;margin-top:2px">
                   <span style="font-size:11px;color:#64748b;white-space:nowrap">📡 WiFi print:</span>
