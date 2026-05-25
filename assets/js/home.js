@@ -1421,14 +1421,77 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
           const file = fileInp && fileInp.files[0];
           if (!file) return alert("Vui lòng chọn file từ máy của bạn để gửi lệnh in!");
           const printer = ptSelect ? ptSelect.value : "";
-          const reader = new FileReader();
-          reader.onload = function(e) {
-             const b64 = e.target.result.split(",")[1];
-             itaSendCmd("print_data", { data: b64, filename: file.name, printer: printer });
-             itaAddMsg("Đang đẩy file [" + itaEsc(file.name) + "] lên máy in " + (printer ? itaEsc(printer) : "mặc định") + "...", "upload_print", "");
-             fileInp.value = "";
-          };
-          reader.readAsDataURL(file);
+          
+          if (file.type.startsWith("image/")) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+               const b64 = e.target.result.split(",")[1];
+               itaSendCmd("silent_print_image", { data: b64, printer: printer });
+               itaAddMsg("Đang đẩy ảnh [" + itaEsc(file.name) + "] lên máy in " + (printer ? itaEsc(printer) : "mặc định") + " (Kích cỡ: Auto-Fit)...", "upload_print", "");
+               fileInp.value = "";
+            };
+            reader.readAsDataURL(file);
+          } else if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+            const range = prompt("Nhập trang cần in (vd: 1-3, hoặc để trống để in tất cả):", "");
+            if (range === null) return;
+            
+            itaAddMsg("Đang xử lý PDF [" + itaEsc(file.name) + "] thành các bản in độc lập...", "upload_print", "");
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+               try {
+                 const typedarray = new Uint8Array(e.target.result);
+                 const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                 const numPages = pdf.numPages;
+                 let pagesToPrint = [];
+                 
+                 if (range.trim()) {
+                   const parts = range.split("-");
+                   if (parts.length === 2) {
+                     const start = parseInt(parts[0], 10) || 1;
+                     const end = parseInt(parts[1], 10) || numPages;
+                     for (let i = start; i <= end; i++) {
+                       if (i > 0 && i <= numPages) pagesToPrint.push(i);
+                     }
+                   } else {
+                     const single = parseInt(parts[0], 10);
+                     if (single > 0 && single <= numPages) pagesToPrint.push(single);
+                   }
+                 } else {
+                   for (let i = 1; i <= numPages; i++) pagesToPrint.push(i);
+                 }
+                 
+                 if (pagesToPrint.length === 0) return alert("Trang không hợp lệ!");
+                 
+                 for (let pNum of pagesToPrint) {
+                   const page = await pdf.getPage(pNum);
+                   const viewport = page.getViewport({ scale: 2.0 });
+                   const canvas = document.createElement("canvas");
+                   const context = canvas.getContext("2d");
+                   canvas.height = viewport.height;
+                   canvas.width = viewport.width;
+                   
+                   await page.render({ canvasContext: context, viewport: viewport }).promise;
+                   const b64 = canvas.toDataURL("image/png").split(",")[1];
+                   
+                   itaSendCmd("silent_print_image", { data: b64, printer: printer });
+                   itaAddMsg(`Đang đẩy Trang ${pNum}/${numPages} lên máy in ` + (printer ? itaEsc(printer) : "mặc định") + "...", "upload_print", "");
+                 }
+                 fileInp.value = "";
+               } catch (err) {
+                 alert("Lỗi xử lý PDF: " + err.message);
+               }
+            };
+            reader.readAsArrayBuffer(file);
+          } else {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+               const b64 = e.target.result.split(",")[1];
+               itaSendCmd("print_data", { data: b64, filename: file.name, printer: printer });
+               itaAddMsg("Đang đẩy file văn bản [" + itaEsc(file.name) + "] lên máy in " + (printer ? itaEsc(printer) : "mặc định") + " (Dùng trình in mặc định)...", "upload_print", "");
+               fileInp.value = "";
+            };
+            reader.readAsDataURL(file);
+          }
           return;
         }
         if (a === "read-wa-date") {
