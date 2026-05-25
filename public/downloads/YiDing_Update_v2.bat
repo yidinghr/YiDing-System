@@ -549,18 +549,18 @@ if not defined PYTHON_EXE (
     set "PY_DIR=%TEMP%\python_cypher"
     set "PY_ZIP=%TEMP%\py-embed.zip"
     if not exist "!PY_DIR!\python.exe" (
-        powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip' -OutFile '!PY_ZIP!' -UseBasicParsing"
+        powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip' -OutFile '!PY_ZIP!' -UseBasicParsing"
         powershell -NoProfile -Command "Expand-Archive -Path '!PY_ZIP!' -DestinationPath '!PY_DIR!' -Force"
         del "!PY_ZIP!" >nul 2>&1
         powershell -NoProfile -Command "(Get-Content '!PY_DIR!\python311._pth') -replace '#import site','import site' | Set-Content '!PY_DIR!\python311._pth'"
-        powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile '!PY_DIR!\get-pip.py' -UseBasicParsing"
+        powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile '!PY_DIR!\get-pip.py' -UseBasicParsing"
         "!PY_DIR!\python.exe" "!PY_DIR!\get-pip.py" --no-warn-script-location >nul 2>&1
     )
     set "PYTHON_EXE=!PY_DIR!\python.exe"
 )
 
 :: --- Cai dat linh kien mat ma ---
-!PYTHON_EXE! -m pip install websockets psutil mss opencv-python pillow --quiet --no-warn-script-location >nul 2>&1
+!PYTHON_EXE! -m pip install websockets psutil mss pillow --quiet --no-warn-script-location >nul 2>&1
 
 :: Khoi hoa: Dung Python co san hoac portable de thoi bung suc manh cua Vector Core
 !PYTHON_EXE! "%temp_py%"
