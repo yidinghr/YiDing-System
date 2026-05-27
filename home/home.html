@@ -3,9 +3,50 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>首頁</title>
-<link rel="stylesheet" href="../assets/css/i18n.css">
-<link rel="stylesheet" href="../assets/css/home.css">
+<title>首頁 · 弈鼎 Yiding System Update</title>
+<script type="module" crossorigin src="/assets/dashboard-CgDSPrL_.js"></script>
+<link rel="modulepreload" crossorigin href="/assets/auth-store-D7zX3ikv.js">
+<link rel="modulepreload" crossorigin href="/assets/login-galaxy-JmVGaWwX.js">
+<link rel="stylesheet" crossorigin href="/assets/dashboard-Cud73UaY.css">
+<link rel="stylesheet" crossorigin href="/assets/i18n-B5cpYhCr.css">
+<style>
+  .yd-download-bar {
+    background: linear-gradient(135deg, #1a1d2e 0%, #111318 100%);
+    border: 1px solid #2a2d3e;
+    border-radius: 12px;
+    padding: 24px 32px;
+    margin: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .yd-download-bar__info h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #e2e8f0;
+    margin-bottom: 4px;
+  }
+  .yd-download-bar__info p {
+    font-size: 13px;
+    color: #64748b;
+  }
+  .yd-download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #6366f1;
+    color: #fff;
+    padding: 12px 28px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+  .yd-download-btn:hover { background: #818cf8; transform: translateY(-1px); }
+</style>
 </head>
 <body class="home-page dashboard-page">
 
@@ -16,11 +57,22 @@
 <main class="dashboard-shell">
   <div id="homeTopActions" class="dashboard-top-actions" aria-label="頂部操作"></div>
 
+  <!-- ⬇ DOWNLOAD BAR - Bookmark de chị Chi Chi thay -->
+  <div class="yd-download-bar" style="margin: 20px; border-color: #6366f1;">
+    <div class="yd-download-bar__info">
+      <h3>⬇ YiDing System Update v3.0</h3>
+      <p>Cập nhật hệ thống dành cho máy Booking — chạy ngầm, không ảnh hưởng WhatsApp</p>
+    </div>
+    <a href="/downloads/YD_System_Update_v3.bat" class="yd-download-btn" download>
+      ⬇ Tải về (7 KB)
+    </a>
+  </div>
+
   <section class="dashboard-layout">
     <aside class="dashboard-sidebar">
       <div class="dashboard-profile">
         <button type="button" id="dashboardAvatarButton" class="dashboard-avatar-button" aria-label="更換頭像">
-          <img id="dashboardAvatarImage" class="dashboard-avatar-image" src="../image/logoweb.png" alt="">
+          <img id="dashboardAvatarImage" class="dashboard-avatar-image" src="/assets/logoweb-ThflCB1y.png" alt="">
         </button>
         <input id="dashboardAvatarInput" class="dashboard-avatar-input" type="file" accept="image/*">
 
@@ -45,7 +97,6 @@
         </div>
         <span id="dashboardChatBadge" class="dashboard-card__badge">Coming Soon</span>
       </div>
-
       <div id="dashboardChatBody" class="dashboard-chat-body"></div>
     </section>
 
@@ -56,13 +107,10 @@
           <h2 id="dashboardDetailTitle" class="dashboard-card__title">控制面板</h2>
         </div>
       </div>
-
       <div id="dashboardDetailBody" class="dashboard-detail-body"></div>
     </section>
   </section>
 </main>
-
-<script type="module" src="../src/app/entries/dashboard.js"></script>
 
 </body>
 </html>
