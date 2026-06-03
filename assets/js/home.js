@@ -1,5 +1,27 @@
 import * as pdfjsLib from "pdfjs-dist";
 import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
+import {
+  buildPalaceMidExchangePayload,
+  buildPalaceSettlementPayload,
+  buildPalaceTipPayload,
+  palaceLegacySessionPath
+} from "../../src/features/ito-operations/adapters/palace-adapter.mjs";
+import {
+  formatPalaceAmount as formatPalaceAmountValue,
+  getPalaceOperationSubmitLabel,
+  renderPalaceCurrencyOptions,
+  renderPalaceCustomerOptions,
+  renderPalaceConsumptionRows,
+  renderPalaceCreditRows,
+  renderPalaceOperationFields,
+  renderPalaceOperationButton,
+  renderPalaceRows as renderPalaceTableRows,
+  renderPalaceSessionRows,
+  renderPalaceSettlementFiltersForm,
+  renderPalaceSettlementPager,
+  renderPalaceSettlementRows,
+  renderPalaceSessionCustomerOptions
+} from "../../src/features/ito-operations/ui/palace-render-helpers.mjs";
 
 (function () {
   const i18n = window.YiDingI18n || null;
@@ -10,6 +32,8 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
   const SALARY_SHIFT_STORAGE_KEY = "yiding_salary_shift_definitions_v1";
   const REDIRECT_TO_LOGIN = "../index.html";
   const CHI_CHI_URL = "http://46.225.160.243";
+  const PALACE_BASE_URL = "https://fmcapp.com/palace";
+  const PALACE_URL = PALACE_BASE_URL + "/login";
   const PDF_FORM_URL = new URL("../pdf/ito-representative-application-form.pdf", import.meta.url).href;
   const ROLE_OWNER = "owner";
   const NIGHT_SHIFT_START_MINUTES = 22 * 60;
@@ -239,6 +263,47 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     salaryTableMonthKey: defaultSalaryTableMonthKey(),
     pdfZoom: 1.25,
     pdfValues: Object.create(null)
+  };
+  const palaceState = {
+    bootstrapped: false,
+    loading: false,
+    pending: false,
+    connected: false,
+    operatorName: "",
+    staffAccount: "",
+    customers: [],
+    transactions: [],
+    creditRecords: [],
+    consumptionRecords: [],
+    gameSessions: [],
+    settlementRows: [],
+    settlementTotal: 0,
+    settlementPage: 1,
+    settlementTotalPages: 1,
+    settlementFilters: {
+      period: "daily",
+      page: 1,
+      guest: "",
+      keyword: "",
+      operator: "",
+      from: "",
+      to: ""
+    },
+    settlementEmptyLabel: "No settlement rows loaded yet.",
+    settlementDetail: null,
+    settlementDetailId: "",
+    settlementDetailLoading: false,
+    settlementDetailError: "",
+    sessionSettleId: "",
+    sessionSettleDraft: null,
+    sessionMidId: "",
+    sessionMidDraft: null,
+    sessionTipId: "",
+    sessionTipDraft: null,
+    sessionCustomerId: "",
+    error: "",
+    success: "",
+    operation: "deposit"
   };
   let pdfDocumentPromise = null;
   let pdfRenderToken = 0;
@@ -657,7 +722,21 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     salaryEnd: "Kết thúc",
     salaryEditTitle: "Sửa quy ước ca",
     salaryEditInvalid: "Mã ca và giờ phải hợp lệ, không được trùng mã.",
-    salaryEditSaved: "Đã lưu quy ước ca."
+    salaryEditSaved: "Đã lưu quy ước ca.",
+    menuPalaceOperations: "Palace Operations",
+    palaceTitle: "Palace Operations",
+    palaceBadge: "Integrated",
+    palaceLead: "把 Palace 資產系統帶進 YiDing 主控台，保留左側導航與現有品牌視覺。",
+    palaceHint: "若瀏覽器阻擋第三方登入 Cookie，請改用新分頁開啟完整系統。",
+    palaceOpen: "新分頁打開 Palace",
+    palaceReload: "重新載入",
+    palaceStatus: "嵌入式營運面板",
+    palaceScopeTitle: "涵蓋模組",
+    palaceScopeBody: "存款、提款、戶口轉帳、開局、賒賬管理、消費記錄與交易歷史都從這裡進入。",
+    palaceLoginTitle: "登入方式",
+    palaceLoginBody: "這個嵌入視窗會直接開到 Palace 登入頁；登入後可繼續停留在 YiDing 外層殼層內操作。",
+    palaceFallbackTitle: "相容性",
+    palaceFallbackBody: "若 iframe 因跨站 Cookie 或瀏覽器安全策略被限制，請用右上角按鈕切到獨立分頁。"
   });
   Object.assign(customText.vi, {
     menuPdf: "Làm file pdf",
@@ -698,7 +777,21 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     salaryEnd: "Kết thúc",
     salaryEditTitle: "Sửa quy ước ca",
     salaryEditInvalid: "Mã ca và giờ phải hợp lệ, không được trùng mã.",
-    salaryEditSaved: "Đã lưu quy ước ca."
+    salaryEditSaved: "Đã lưu quy ước ca.",
+    menuPalaceOperations: "Palace Operations",
+    palaceTitle: "Palace Operations",
+    palaceBadge: "Integrated",
+    palaceLead: "Đưa thẳng hệ thống tài sản Palace vào dashboard YiDing, giữ nguyên panel trái và phong cách hiện tại của web.",
+    palaceHint: "Nếu trình duyệt chặn cookie đăng nhập bên thứ ba, hãy mở hệ thống ở tab mới để dùng đầy đủ.",
+    palaceOpen: "Mở Palace tab mới",
+    palaceReload: "Tải lại",
+    palaceStatus: "Bảng vận hành nhúng",
+    palaceScopeTitle: "Phạm vi module",
+    palaceScopeBody: "Nạp, rút, chuyển khoản, mở bàn, credit, consumption và lịch sử giao dịch đều đi từ đây.",
+    palaceLoginTitle: "Cách đăng nhập",
+    palaceLoginBody: "Khung nhúng mở trực tiếp trang login Palace; sau khi đăng nhập có thể tiếp tục thao tác trong vỏ YiDing.",
+    palaceFallbackTitle: "Tương thích",
+    palaceFallbackBody: "Nếu iframe bị giới hạn bởi cookie cross-site hoặc chính sách bảo mật của trình duyệt, dùng nút góc phải để mở hẳn tab riêng."
   });
   Object.assign(customText.en, {
     menuPdf: "Make PDF",
@@ -739,7 +832,21 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     salaryEnd: "End",
     salaryEditTitle: "Edit Shift Rules",
     salaryEditInvalid: "Shift codes and times must be valid, with no duplicate codes.",
-    salaryEditSaved: "Shift rules saved."
+    salaryEditSaved: "Shift rules saved.",
+    menuPalaceOperations: "Palace Operations",
+    palaceTitle: "Palace Operations",
+    palaceBadge: "Integrated",
+    palaceLead: "Pull the Palace asset system into the YiDing command surface while keeping the existing left rail and visual language.",
+    palaceHint: "If the browser blocks third-party auth cookies, open the full system in a separate tab.",
+    palaceOpen: "Open Palace in New Tab",
+    palaceReload: "Reload",
+    palaceStatus: "Embedded operations surface",
+    palaceScopeTitle: "Module coverage",
+    palaceScopeBody: "Deposits, withdrawals, transfers, game start, credit records, consumption and transaction history all start here.",
+    palaceLoginTitle: "Sign-in flow",
+    palaceLoginBody: "The embedded frame opens the Palace login directly. After sign-in, operators can keep working inside the YiDing shell.",
+    palaceFallbackTitle: "Compatibility",
+    palaceFallbackBody: "If iframe access is restricted by cross-site cookies or browser security policy, use the top-right button to switch to a dedicated tab."
   });
   const menuConfigs = [
     { id: "employees", labelKey: "menuEmployees", icon: "👥", adminOnly: true },
@@ -747,6 +854,7 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     { id: "operationTraining", labelKey: "menuTraining", icon: "🎯" },
     { id: "pdfMaker", labelKey: "menuPdf", icon: "PDF", adminOnly: true },
     { id: "chiChi", labelKey: "menuChiChi", icon: "💬", adminOnly: true },
+    { id: "palaceOperations", labelKey: "menuPalaceOperations", icon: "♜", adminOnly: true },
     { id: "attendance", labelKey: "menuAttendance", icon: "⏱", adminOnly: true },
     { id: "salary", labelKey: "menuSalary", icon: "₫", adminOnly: true },
     { id: "yidingInfo", labelKey: "menuInfo", icon: "✦", adminOnly: true },
@@ -1271,6 +1379,1180 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 
   // ─── End IT Agent Module ────────────────────────────────────────────────────
 
+  async function palaceApi(path, options) {
+    const response = await fetch("/api/palace" + path, {
+      method: options && options.method ? options.method : "GET",
+      headers: {
+        "Content-Type": "application/json",
+        ...(options && options.headers ? options.headers : {})
+      },
+      credentials: "same-origin",
+      body: options && Object.prototype.hasOwnProperty.call(options, "body")
+        ? JSON.stringify(options.body)
+        : undefined
+    });
+    const rawText = await response.text();
+    let body;
+    try {
+      body = rawText ? JSON.parse(rawText) : {};
+    } catch (error) {
+      body = { text: rawText };
+    }
+    if (!response.ok) {
+      throw new Error(body.message || body.text || "Palace request failed");
+    }
+    return body;
+  }
+
+  function palaceResetSessionData() {
+    palaceState.connected = false;
+    palaceState.operatorName = "";
+    palaceState.staffAccount = "";
+    palaceState.customers = [];
+    palaceState.transactions = [];
+    palaceState.creditRecords = [];
+    palaceState.consumptionRecords = [];
+    palaceState.gameSessions = [];
+    palaceState.settlementRows = [];
+    palaceState.settlementTotal = 0;
+    palaceState.settlementPage = 1;
+    palaceState.settlementTotalPages = 1;
+    palaceState.settlementDetail = null;
+    palaceState.settlementDetailId = "";
+    palaceState.settlementDetailLoading = false;
+    palaceState.settlementDetailError = "";
+    palaceState.sessionSettleId = "";
+    palaceState.sessionSettleDraft = null;
+    palaceState.sessionMidId = "";
+    palaceState.sessionMidDraft = null;
+    palaceState.sessionTipId = "";
+    palaceState.sessionTipDraft = null;
+  }
+
+  async function palaceHydrateSession() {
+    const auth = await palaceApi("/auth/me");
+    palaceState.connected = true;
+    palaceState.operatorName = String(auth.operatorName || "");
+    palaceState.staffAccount = String(auth.staffAccount || "");
+    await Promise.all([
+      palaceLoadCustomers(),
+      palaceLoadTransactions(),
+      palaceLoadCreditRecords(),
+      palaceLoadConsumptionRecords(),
+      palaceLoadGameSessions(),
+      palaceLoadSettlementSnapshot()
+    ]);
+  }
+
+  async function palaceEnsureBoot() {
+    if (palaceState.loading || palaceState.pending) {
+      return;
+    }
+    palaceState.loading = true;
+    palaceState.error = "";
+    try {
+      await palaceHydrateSession();
+    } catch (error) {
+      palaceResetSessionData();
+      palaceState.error = "";
+    } finally {
+      palaceState.bootstrapped = true;
+      palaceState.loading = false;
+      if (uiState.activeTab === "palaceOperations") {
+        renderChatPanel();
+      }
+    }
+  }
+
+  async function palaceLoadCustomers() {
+    const payload = await palaceApi("/customers");
+    palaceState.customers = Array.isArray(payload.items) ? payload.items : [];
+  }
+
+  async function palaceLoadTransactions() {
+    const payload = await palaceApi("/transactions?period=daily&page=1");
+    palaceState.transactions = Array.isArray(payload.items) ? payload.items : [];
+  }
+
+  async function palaceLoadCreditRecords() {
+    const payload = await palaceApi("/credit-records?limit=12");
+    palaceState.creditRecords = Array.isArray(payload.records) ? payload.records : [];
+  }
+
+  async function palaceLoadConsumptionRecords() {
+    const payload = await palaceApi("/consumption-records?limit=12");
+    palaceState.consumptionRecords = Array.isArray(payload.records) ? payload.records : [];
+  }
+
+  async function palaceLoadGameSessions() {
+    const path = palaceState.sessionCustomerId
+      ? "/game-sessions?customerId=" + encodeURIComponent(palaceState.sessionCustomerId)
+      : "/game-sessions?status=ACTIVE&page=1";
+    const payload = await palaceApi(path);
+    palaceState.gameSessions = Array.isArray(payload.items) ? payload.items.slice(0, 12) : [];
+  }
+
+  function palaceBuildSettlementQuery(overrides) {
+    const nextFilters = {
+      period: "daily",
+      page: 1,
+      guest: "",
+      keyword: "",
+      operator: "",
+      from: "",
+      to: "",
+      ...palaceState.settlementFilters,
+      ...(overrides || {})
+    };
+    const page = Math.max(1, Number(nextFilters.page || 1));
+    nextFilters.page = page;
+    const params = new URLSearchParams();
+    params.set("period", String(nextFilters.period || "daily"));
+    params.set("page", String(page));
+    ["guest", "keyword", "operator", "from", "to"].forEach(function (key) {
+      const value = String(nextFilters[key] || "").trim();
+      nextFilters[key] = value;
+      if (value) {
+        params.set(key, value);
+      }
+    });
+    return {
+      filters: nextFilters,
+      query: params.toString()
+    };
+  }
+
+  async function palaceLoadSettlementSnapshot(overrides) {
+    const snapshotQuery = palaceBuildSettlementQuery(overrides);
+    const payload = await palaceApi("/snapshots/game-settlement?" + snapshotQuery.query);
+    const nextFilters = {
+      ...snapshotQuery.filters,
+      ...(payload.filters || {})
+    };
+    nextFilters.page = Number(payload.page || nextFilters.page || 1);
+    palaceState.settlementRows = Array.isArray(payload.rows) ? payload.rows : [];
+    palaceState.settlementTotal = Number(payload.total || 0);
+    palaceState.settlementPage = Number(payload.page || nextFilters.page || 1);
+    palaceState.settlementTotalPages = Number(payload.totalPages || 1);
+    palaceState.settlementFilters = nextFilters;
+    palaceState.settlementEmptyLabel = String(payload.emptyLabel || "No settlement rows loaded yet.");
+  }
+
+  async function palaceRefreshAll() {
+    palaceState.loading = true;
+    palaceState.error = "";
+    renderChatPanel();
+    try {
+      await palaceHydrateSession();
+    } catch (error) {
+      palaceResetSessionData();
+      palaceState.error = error instanceof Error ? error.message : "Unable to refresh Palace";
+    } finally {
+      palaceState.loading = false;
+      if (uiState.activeTab === "palaceOperations") {
+        renderChatPanel();
+      }
+    }
+  }
+
+  async function palaceConnect(form) {
+    const staffAccount = String((new FormData(form)).get("staffAccount") || "").trim();
+    const password = String((new FormData(form)).get("password") || "");
+    if (!staffAccount || !password) {
+      palaceState.error = "Enter Palace account and password.";
+      palaceState.success = "";
+      renderChatPanel();
+      return;
+    }
+    palaceState.pending = true;
+    palaceState.error = "";
+    palaceState.success = "";
+    renderChatPanel();
+    try {
+      await palaceApi("/login", { method: "POST", body: { staffAccount, password } });
+      palaceState.connected = true;
+      palaceState.success = "Palace connected.";
+      await palaceRefreshAll();
+    } catch (error) {
+      palaceState.connected = false;
+      palaceState.error = error instanceof Error ? error.message : "Palace login failed";
+    } finally {
+      palaceState.pending = false;
+      if (uiState.activeTab === "palaceOperations") {
+        renderChatPanel();
+      }
+    }
+  }
+
+  async function palaceDisconnect() {
+    palaceState.pending = true;
+    renderChatPanel();
+    try {
+      await palaceApi("/logout", { method: "POST", body: {} });
+    } catch (error) {
+      // ignore logout transport errors
+    }
+    palaceResetSessionData();
+    palaceState.pending = false;
+    palaceState.success = "Palace session closed.";
+    palaceState.error = "";
+    renderChatPanel();
+  }
+
+  async function palaceSubmitOperation(form) {
+    const data = new FormData(form);
+    const operation = String(data.get("operation") || palaceState.operation);
+    const amount = Number(data.get("amount"));
+    const currency = String(data.get("currency") || "HKD");
+    const remarks = String(data.get("remarks") || "").trim();
+    const customerId = String(data.get("customerId") || "");
+    const fromCustomerId = String(data.get("fromCustomerId") || "");
+    const toCustomerId = String(data.get("toCustomerId") || "");
+    const chipCategory = String(data.get("chipCategory") || "DPNN11");
+    const mode = String(data.get("mode") || "CASH");
+    const creditType = String(data.get("creditType") || "borrow");
+    const consumptionType = String(data.get("consumptionType") || "cash");
+    const subType = String(data.get("subType") || "food");
+    const points = Number(data.get("points"));
+    const cashPaid = Number(data.get("cashPaid"));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      palaceState.error = "Amount must be greater than 0.";
+      palaceState.success = "";
+      renderChatPanel();
+      return;
+    }
+    palaceState.pending = true;
+    palaceState.error = "";
+    palaceState.success = "";
+    renderChatPanel();
+    try {
+      if (operation === "deposit") {
+        if (!customerId) {
+          throw new Error("Select a customer account.");
+        }
+        await palaceApi("/transactions/deposit", {
+          method: "POST",
+          body: {
+            customerId,
+            amount,
+            paymentMethod: "現金",
+            currency,
+            remarks
+          }
+        });
+      } else if (operation === "withdraw") {
+        if (!customerId) {
+          throw new Error("Select a customer account.");
+        }
+        await palaceApi("/transactions/withdrawal", {
+          method: "POST",
+          body: {
+            customerId,
+            amount,
+            paymentMethod: "現金",
+            currency,
+            withdrawalType: "取款",
+            remarks
+          }
+        });
+      } else if (operation === "transfer") {
+        if (!fromCustomerId || !toCustomerId) {
+          throw new Error("Select both source and target accounts.");
+        }
+        await palaceApi("/transactions/transfer", {
+          method: "POST",
+          body: {
+            fromCustomerId,
+            toCustomerId,
+            amount,
+            currency,
+            remarks
+          }
+        });
+      } else if (operation === "gameStart") {
+        if (!customerId) {
+          throw new Error("Select a customer account.");
+        }
+        await palaceApi("/transactions/game-start", {
+          method: "POST",
+          body: {
+            kind: "NEW",
+            customerId,
+            mode,
+            amount,
+            chipCategory,
+            guestSegment: "YiDing Native",
+            currency,
+            remarks
+          }
+        });
+      } else if (operation === "creditSignout" || operation === "creditRepay") {
+        if (!customerId) {
+          throw new Error("Select a customer account.");
+        }
+        await palaceApi("/credit-records", {
+          method: "POST",
+          body: {
+            customerAccountId: customerId,
+            type: creditType || (operation === "creditRepay" ? "repay" : "borrow"),
+            amount,
+            currency,
+            remark: remarks
+          }
+        });
+      } else if (operation === "consumption") {
+        if (!customerId) {
+          throw new Error("Select a customer account.");
+        }
+        await palaceApi("/consumption-records", {
+          method: "POST",
+          body: {
+            customerAccountId: customerId,
+            type: consumptionType,
+            subType,
+            amount,
+            currency,
+            points: Number.isFinite(points) ? points : 0,
+            cashPaid: Number.isFinite(cashPaid) ? cashPaid : 0,
+            remark: remarks
+          }
+        });
+      }
+      palaceState.success = "Operation submitted to Palace.";
+      await palaceRefreshAll();
+    } catch (error) {
+      palaceState.error = error instanceof Error ? error.message : "Operation failed";
+    } finally {
+      palaceState.pending = false;
+      if (uiState.activeTab === "palaceOperations") {
+        renderChatPanel();
+      }
+    }
+  }
+
+  function palaceCurrencyOptions() {
+    return renderPalaceCurrencyOptions();
+  }
+
+  function palaceOperationButton(id, label) {
+    return renderPalaceOperationButton(id, label, palaceState.operation);
+  }
+
+  function palaceCustomerOptions() {
+    return renderPalaceCustomerOptions(palaceState.customers);
+  }
+
+  function palaceFormatAmount(value) {
+    return formatPalaceAmountValue(value);
+  }
+
+  function palaceRenderRows(rows, columns) {
+    return renderPalaceTableRows(rows, columns);
+  }
+
+  function palaceSessionCustomerOptions() {
+    return renderPalaceSessionCustomerOptions(palaceState.customers, palaceState.sessionCustomerId);
+  }
+
+  async function palaceRefreshSessionsFromDom() {
+    const select = document.getElementById("palaceSessionCustomerSelect");
+    palaceState.sessionCustomerId = select ? String(select.value || "") : "";
+    palaceState.loading = true;
+    palaceState.error = "";
+    palaceState.success = "";
+    renderChatPanel();
+    try {
+      await palaceLoadGameSessions();
+    } catch (error) {
+      palaceState.error = error instanceof Error ? error.message : "Unable to load active sessions";
+    } finally {
+      palaceState.loading = false;
+      if (uiState.activeTab === "palaceOperations") {
+        renderChatPanel();
+      }
+    }
+  }
+
+  function palaceOpenExport(path) {
+    window.open("/api/palace" + path, "_blank", "noopener,noreferrer");
+  }
+
+  function palaceOpenLegacySessionPath(path) {
+    window.open(PALACE_BASE_URL + path, "_blank", "noopener,noreferrer");
+  }
+
+  function palaceFindGameSession(sessionId) {
+    return palaceState.gameSessions.find(function (row) {
+      return row.id === sessionId;
+    }) || null;
+  }
+
+  function palaceClearSessionActionPanels(keep) {
+    if (keep !== "settle") {
+      palaceState.sessionSettleId = "";
+      palaceState.sessionSettleDraft = null;
+    }
+    if (keep !== "mid") {
+      palaceState.sessionMidId = "";
+      palaceState.sessionMidDraft = null;
+    }
+    if (keep !== "tip") {
+      palaceState.sessionTipId = "";
+      palaceState.sessionTipDraft = null;
+    }
+  }
+
+  function palaceReadNonNegativeNumber(formData, key) {
+    const rawValue = String(formData.get(key) || "").trim();
+    const value = rawValue ? Number(rawValue) : 0;
+    return Number.isFinite(value) && value >= 0 ? value : NaN;
+  }
+
+  function palaceRenderSessionContextCards(session) {
+    return [
+      '<div class="palace-native-detail-grid palace-native-detail-grid--wide">',
+      '<div class="palace-native-detail-card"><span class="palace-native-detail-label">Session</span><strong>' + escapeHtml(session.accountNumber || "-") + " · " + escapeHtml(session.displayName || "-") + '</strong><small>' + escapeHtml(session.id) + "</small></div>",
+      '<div class="palace-native-detail-card"><span class="palace-native-detail-label">Current Context</span><strong>' + palaceFormatAmount(session.currentRolling) + " " + escapeHtml(session.openingCurrency || "") + '</strong><small>Playable ' + palaceFormatAmount(session.playableStack) + " · Opening " + palaceFormatAmount(session.openingAmount) + " · " + escapeHtml(session.openingChipCategory || "") + "</small></div>",
+      "</div>"
+    ].join("");
+  }
+
+  async function palaceVoidCredit(recordId) {
+    const voidReason = window.prompt("Void reason", "YiDing native void");
+    if (!voidReason) {
+      return;
+    }
+    palaceState.pending = true;
+    palaceState.error = "";
+    palaceState.success = "";
+    renderChatPanel();
+    try {
+      await palaceApi("/credit-records/" + encodeURIComponent(recordId) + "/void", {
+        method: "POST",
+        body: { voidReason }
+      });
+      palaceState.success = "Credit record voided.";
+      await palaceRefreshAll();
+    } catch (error) {
+      palaceState.error = error instanceof Error ? error.message : "Unable to void credit record";
+    } finally {
+      palaceState.pending = false;
+      if (uiState.activeTab === "palaceOperations") {
+        renderChatPanel();
+      }
+    }
+  }
+
+  async function palaceSettleConsumption(recordId) {
+    palaceState.pending = true;
+    palaceState.error = "";
+    palaceState.success = "";
+    renderChatPanel();
+    try {
+      await palaceApi("/consumption-records/" + encodeURIComponent(recordId) + "/settle", {
+        method: "POST",
+        body: {}
+      });
+      palaceState.success = "Consumption record settled.";
+      await palaceRefreshAll();
+    } catch (error) {
+      palaceState.error = error instanceof Error ? error.message : "Unable to settle consumption record";
+    } finally {
+      palaceState.pending = false;
+      if (uiState.activeTab === "palaceOperations") {
+        renderChatPanel();
+      }
+    }
+  }
+
+  async function palaceVoidConsumption(recordId) {
+    const voidReason = window.prompt("Void reason", "YiDing native void");
+    if (!voidReason) {
+      return;
+    }
+    palaceState.pending = true;
+    palaceState.error = "";
+    palaceState.success = "";
+    renderChatPanel();
+    try {
+      await palaceApi("/consumption-records/" + encodeURIComponent(recordId) + "/void", {
+        method: "POST",
+        body: { voidReason }
+      });
+      palaceState.success = "Consumption record voided.";
+      await palaceRefreshAll();
+    } catch (error) {
+      palaceState.error = error instanceof Error ? error.message : "Unable to void consumption record";
+    } finally {
+      palaceState.pending = false;
+      if (uiState.activeTab === "palaceOperations") {
+        renderChatPanel();
+      }
+    }
+  }
+
+  async function palaceQuickCloseSession(sessionId) {
+    if (!window.confirm("Mark this Palace session closed with zero remaining chips?")) {
+      return;
+    }
+    palaceState.pending = true;
+    palaceState.error = "";
+    palaceState.success = "";
+    renderChatPanel();
+    try {
+      await palaceApi("/game-sessions/" + encodeURIComponent(sessionId) + "/settle", {
+        method: "POST",
+        body: {
+          remainingNn: 0,
+          remainingCc: 0,
+          settleCashOut: 0,
+          settleToAccount: 0,
+          tipNn: 0,
+          tipCc: 0
+        }
+      });
+      palaceState.success = "Session closed through Palace settlement endpoint.";
+      palaceClearSessionActionPanels("");
+      await palaceRefreshAll();
+    } catch (error) {
+      palaceState.error = error instanceof Error ? error.message : "Unable to quick close session";
+    } finally {
+      palaceState.pending = false;
+      if (uiState.activeTab === "palaceOperations") {
+        renderChatPanel();
+      }
+    }
+  }
+
+  function palaceOpenSessionSettlement(sessionId) {
+    const session = palaceFindGameSession(sessionId);
+    palaceClearSessionActionPanels("settle");
+    palaceState.sessionSettleId = sessionId;
+    palaceState.sessionSettleDraft = session || null;
+    palaceState.error = "";
+    palaceState.success = "";
+    if (uiState.activeTab === "palaceOperations") {
+      renderChatPanel();
+    }
+  }
+
+  function palaceCloseSessionSettlement() {
+    palaceState.sessionSettleId = "";
+    palaceState.sessionSettleDraft = null;
+    if (uiState.activeTab === "palaceOperations") {
+      renderChatPanel();
+    }
+  }
+
+  async function palaceSubmitSessionSettlement(form) {
+    const data = new FormData(form);
+    const sessionId = String(data.get("sessionId") || palaceState.sessionSettleId || "");
+    if (!sessionId) {
+      palaceState.error = "Select a live session first.";
+      palaceState.success = "";
+      renderChatPanel();
+      return;
+    }
+    const body = buildPalaceSettlementPayload({
+      remainingNn: data.get("remainingNn"),
+      remainingCc: data.get("remainingCc"),
+      settleCashOut: data.get("settleCashOut"),
+      settleToAccount: data.get("settleToAccount"),
+      tipNn: data.get("tipNn"),
+      tipCc: data.get("tipCc"),
+      tipTargetType: String(data.get("tipTargetType") || "STAFF"),
+      remarks: String(data.get("remarks") || "").trim(),
+      creditRepayAmount: data.get("creditRepayAmount")
+    });
+    const invalidValue = Object.keys(body).some(function (key) {
+      return key !== "tipTargetType" && key !== "remarks" && (!Number.isFinite(body[key]) || body[key] < 0);
+    });
+    if (invalidValue) {
+      palaceState.error = "Settlement fields must be zero or positive numbers.";
+      palaceState.success = "";
+      renderChatPanel();
+      return;
+    }
+    palaceState.pending = true;
+    palaceState.error = "";
+    palaceState.success = "";
+    renderChatPanel();
+    try {
+      await palaceApi("/game-sessions/" + encodeURIComponent(sessionId) + "/settle", {
+        method: "POST",
+        body
+      });
+      palaceState.success = "Detailed settlement submitted to Palace.";
+      palaceClearSessionActionPanels("");
+      await palaceRefreshAll();
+    } catch (error) {
+      palaceState.error = error instanceof Error ? error.message : "Unable to submit detailed settlement";
+    } finally {
+      palaceState.pending = false;
+      if (uiState.activeTab === "palaceOperations") {
+        renderChatPanel();
+      }
+    }
+  }
+
+  function palaceRenderSessionSettlementForm() {
+    if (!palaceState.sessionSettleId || !palaceState.sessionSettleDraft) {
+      return "";
+    }
+    const session = palaceState.sessionSettleDraft;
+    return [
+      '<section class="palace-native-surface">',
+      '<div class="dashboard-panel__meta"><h3 class="dashboard-panel__title">Detailed session settlement</h3><div class="palace-native-actions"><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-session-settle-close">Close</button><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-session-legacy-settle" data-session-id="' + escapeHtml(session.id) + '">Open legacy settle</button></div></div>',
+      '<p class="palace-native-copy">This maps directly to Palace route <code>/dashboard/chip-conversion/settle?session=...</code> and submits to the live settlement endpoint.</p>',
+      palaceRenderSessionContextCards(session),
+      '<form id="palaceSessionSettlementForm" class="palace-native-form">',
+      '<input type="hidden" name="sessionId" value="' + escapeHtml(session.id) + '">',
+      '<div class="palace-native-grid palace-native-grid--triple">',
+      '<label class="dashboard-form-label">Credit repay<input class="dashboard-input" name="creditRepayAmount" type="number" min="0" step="0.01" value="0"></label>',
+      '<label class="dashboard-form-label">Remaining NN<input class="dashboard-input" name="remainingNn" type="number" min="0" step="0.01" value="0"></label>',
+      '<label class="dashboard-form-label">Remaining CC<input class="dashboard-input" name="remainingCc" type="number" min="0" step="0.01" value="0"></label>',
+      "</div>",
+      '<div class="palace-native-grid palace-native-grid--triple">',
+      '<label class="dashboard-form-label">Tip target<select class="dashboard-select" name="tipTargetType"><option value="STAFF">Staff</option><option value="DEALER">Dealer</option></select></label>',
+      '<label class="dashboard-form-label">Tip NN<input class="dashboard-input" name="tipNn" type="number" min="0" step="0.01" value="0"></label>',
+      '<label class="dashboard-form-label">Tip CC<input class="dashboard-input" name="tipCc" type="number" min="0" step="0.01" value="0"></label>',
+      "</div>",
+      '<div class="palace-native-grid">',
+      '<label class="dashboard-form-label">Cash out<input class="dashboard-input" name="settleCashOut" type="number" min="0" step="0.01" value="0"></label>',
+      '<label class="dashboard-form-label">Back to account<input class="dashboard-input" name="settleToAccount" type="number" min="0" step="0.01" value="0"></label>',
+      "</div>",
+      '<label class="dashboard-form-label">Settlement remarks<input class="dashboard-input" name="remarks" type="text" placeholder="Table close, repayment note, cage instruction."></label>',
+      '<div class="palace-native-actions"><button type="submit" class="dashboard-button dashboard-button--accent"' + (palaceState.pending ? " disabled" : "") + '>Submit detailed settlement</button><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-session-settle-zero">Zero values</button></div>',
+      "</form>",
+      "</section>"
+    ].join("");
+  }
+
+  function palaceOpenSessionMidExchange(sessionId) {
+    const session = palaceFindGameSession(sessionId);
+    palaceClearSessionActionPanels("mid");
+    palaceState.sessionMidId = sessionId;
+    palaceState.sessionMidDraft = session || null;
+    palaceState.error = "";
+    palaceState.success = "";
+    if (uiState.activeTab === "palaceOperations") {
+      renderChatPanel();
+    }
+  }
+
+  function palaceCloseSessionMidExchange() {
+    palaceState.sessionMidId = "";
+    palaceState.sessionMidDraft = null;
+    if (uiState.activeTab === "palaceOperations") {
+      renderChatPanel();
+    }
+  }
+
+  async function palaceSubmitSessionMidExchange(form) {
+    const data = new FormData(form);
+    const sessionId = String(data.get("sessionId") || palaceState.sessionMidId || "");
+    const kind = String(data.get("kind") || "CASH_OUT");
+    const amountNn = palaceReadNonNegativeNumber(data, "amountNn");
+    const amountCc = palaceReadNonNegativeNumber(data, "amountCc");
+    const creditRepayAmount = palaceReadNonNegativeNumber(data, "creditRepayAmount");
+    if (!sessionId) {
+      palaceState.error = "Select a live session first.";
+      palaceState.success = "";
+      renderChatPanel();
+      return;
+    }
+    if (![amountNn, amountCc, creditRepayAmount].every(Number.isFinite)) {
+      palaceState.error = "Mid-exchange fields must be zero or positive numbers.";
+      palaceState.success = "";
+      renderChatPanel();
+      return;
+    }
+    if (amountNn + amountCc + creditRepayAmount <= 0) {
+      palaceState.error = "Enter NN, CC or credit repay amount before submitting mid-exchange.";
+      palaceState.success = "";
+      renderChatPanel();
+      return;
+    }
+    const body = buildPalaceMidExchangePayload({
+      kind,
+      amountNn,
+      amountCc,
+      creditRepayAmount
+    });
+    palaceState.pending = true;
+    palaceState.error = "";
+    palaceState.success = "";
+    renderChatPanel();
+    try {
+      await palaceApi("/game-sessions/" + encodeURIComponent(sessionId) + "/mid-exchange", {
+        method: "POST",
+        body
+      });
+      palaceState.success = "Mid-exchange registered through Palace endpoint.";
+      palaceClearSessionActionPanels("");
+      await palaceRefreshAll();
+    } catch (error) {
+      palaceState.error = error instanceof Error ? error.message : "Unable to submit mid-exchange";
+    } finally {
+      palaceState.pending = false;
+      if (uiState.activeTab === "palaceOperations") {
+        renderChatPanel();
+      }
+    }
+  }
+
+  function palaceRenderSessionMidExchangeForm() {
+    if (!palaceState.sessionMidId || !palaceState.sessionMidDraft) {
+      return "";
+    }
+    const session = palaceState.sessionMidDraft;
+    return [
+      '<section class="palace-native-surface">',
+      '<div class="dashboard-panel__meta"><h3 class="dashboard-panel__title">Mid-exchange</h3><div class="palace-native-actions"><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-session-mid-close">Close</button><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-session-legacy-mid" data-session-id="' + escapeHtml(session.id) + '">Open legacy mid</button></div></div>',
+      '<p class="palace-native-copy">Registers a live Palace chip conversion. Amount inputs use the same wan display unit as the legacy chip-conversion page.</p>',
+      palaceRenderSessionContextCards(session),
+      '<form id="palaceSessionMidForm" class="palace-native-form">',
+      '<input type="hidden" name="sessionId" value="' + escapeHtml(session.id) + '">',
+      '<div class="palace-native-grid palace-native-grid--triple">',
+      '<label class="dashboard-form-label">Exchange kind<select class="dashboard-select" name="kind"><option value="CASH_OUT">Cash out</option><option value="TO_ACCOUNT">Back to account</option><option value="CREDIT_REPAY">Credit repay only</option></select></label>',
+      '<label class="dashboard-form-label">NN amount<input class="dashboard-input" name="amountNn" type="number" min="0" step="0.01" value="0"></label>',
+      '<label class="dashboard-form-label">CC amount<input class="dashboard-input" name="amountCc" type="number" min="0" step="0.01" value="0"></label>',
+      "</div>",
+      '<label class="dashboard-form-label">Additional credit repay<input class="dashboard-input" name="creditRepayAmount" type="number" min="0" step="0.01" value="0"></label>',
+      '<div class="palace-native-actions"><button type="submit" class="dashboard-button dashboard-button--accent"' + (palaceState.pending ? " disabled" : "") + '>Submit mid-exchange</button><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-session-mid-zero">Zero values</button></div>',
+      "</form>",
+      "</section>"
+    ].join("");
+  }
+
+  function palaceOpenSessionTip(sessionId) {
+    const session = palaceFindGameSession(sessionId);
+    palaceClearSessionActionPanels("tip");
+    palaceState.sessionTipId = sessionId;
+    palaceState.sessionTipDraft = session || null;
+    palaceState.error = "";
+    palaceState.success = "";
+    if (uiState.activeTab === "palaceOperations") {
+      renderChatPanel();
+    }
+  }
+
+  function palaceCloseSessionTip() {
+    palaceState.sessionTipId = "";
+    palaceState.sessionTipDraft = null;
+    if (uiState.activeTab === "palaceOperations") {
+      renderChatPanel();
+    }
+  }
+
+  async function palaceSubmitSessionTip(form) {
+    const data = new FormData(form);
+    const sessionId = String(data.get("sessionId") || palaceState.sessionTipId || "");
+    const amountNn = palaceReadNonNegativeNumber(data, "amountNn");
+    const amountCc = palaceReadNonNegativeNumber(data, "amountCc");
+    const targetType = String(data.get("targetType") || "STAFF");
+    if (!sessionId) {
+      palaceState.error = "Select a live session first.";
+      palaceState.success = "";
+      renderChatPanel();
+      return;
+    }
+    if (![amountNn, amountCc].every(Number.isFinite)) {
+      palaceState.error = "Tip fields must be zero or positive numbers.";
+      palaceState.success = "";
+      renderChatPanel();
+      return;
+    }
+    if (amountNn + amountCc <= 0) {
+      palaceState.error = "Enter NN or CC tip amount before submitting.";
+      palaceState.success = "";
+      renderChatPanel();
+      return;
+    }
+    const body = buildPalaceTipPayload({
+      amountNn,
+      amountCc,
+      targetType
+    });
+    palaceState.pending = true;
+    palaceState.error = "";
+    palaceState.success = "";
+    renderChatPanel();
+    try {
+      await palaceApi("/game-sessions/" + encodeURIComponent(sessionId) + "/tip", {
+        method: "POST",
+        body
+      });
+      palaceState.success = "Tip registered through Palace endpoint.";
+      palaceClearSessionActionPanels("");
+      await palaceRefreshAll();
+    } catch (error) {
+      palaceState.error = error instanceof Error ? error.message : "Unable to submit tip";
+    } finally {
+      palaceState.pending = false;
+      if (uiState.activeTab === "palaceOperations") {
+        renderChatPanel();
+      }
+    }
+  }
+
+  function palaceRenderSessionTipForm() {
+    if (!palaceState.sessionTipId || !palaceState.sessionTipDraft) {
+      return "";
+    }
+    const session = palaceState.sessionTipDraft;
+    return [
+      '<section class="palace-native-surface">',
+      '<div class="dashboard-panel__meta"><h3 class="dashboard-panel__title">Session tip</h3><div class="palace-native-actions"><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-session-tip-close">Close</button><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-session-legacy-tip" data-session-id="' + escapeHtml(session.id) + '">Open legacy tip</button></div></div>',
+      '<p class="palace-native-copy">Registers staff or dealer tip for this live Palace session.</p>',
+      palaceRenderSessionContextCards(session),
+      '<form id="palaceSessionTipForm" class="palace-native-form">',
+      '<input type="hidden" name="sessionId" value="' + escapeHtml(session.id) + '">',
+      '<div class="palace-native-grid palace-native-grid--triple">',
+      '<label class="dashboard-form-label">Tip target<select class="dashboard-select" name="targetType"><option value="STAFF">Staff</option><option value="DEALER">Dealer</option></select></label>',
+      '<label class="dashboard-form-label">Tip NN<input class="dashboard-input" name="amountNn" type="number" min="0" step="0.01" value="0"></label>',
+      '<label class="dashboard-form-label">Tip CC<input class="dashboard-input" name="amountCc" type="number" min="0" step="0.01" value="0"></label>',
+      "</div>",
+      '<div class="palace-native-actions"><button type="submit" class="dashboard-button dashboard-button--accent"' + (palaceState.pending ? " disabled" : "") + '>Submit tip</button><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-session-tip-zero">Zero values</button></div>',
+      "</form>",
+      "</section>"
+    ].join("");
+  }
+
+  async function palaceRefreshSettlementSnapshot(overrides) {
+    palaceState.loading = true;
+    palaceState.error = "";
+    palaceState.success = "";
+    renderChatPanel();
+    try {
+      await palaceLoadSettlementSnapshot(overrides);
+    } catch (error) {
+      palaceState.error = error instanceof Error ? error.message : "Unable to load settlement reports";
+    } finally {
+      palaceState.loading = false;
+      if (uiState.activeTab === "palaceOperations") {
+        renderChatPanel();
+      }
+    }
+  }
+
+  async function palaceRefreshSettlementFromForm(form, reset) {
+    if (reset) {
+      palaceState.settlementDetail = null;
+      palaceState.settlementDetailId = "";
+      palaceState.settlementDetailError = "";
+      await palaceRefreshSettlementSnapshot({
+        period: "daily",
+        page: 1,
+        guest: "",
+        keyword: "",
+        operator: "",
+        from: "",
+        to: ""
+      });
+      return;
+    }
+    const data = new FormData(form);
+    palaceState.settlementDetail = null;
+    palaceState.settlementDetailId = "";
+    palaceState.settlementDetailError = "";
+    await palaceRefreshSettlementSnapshot({
+      period: String(data.get("period") || "daily"),
+      page: 1,
+      guest: String(data.get("guest") || "").trim(),
+      keyword: String(data.get("keyword") || "").trim(),
+      operator: String(data.get("operator") || "").trim(),
+      from: String(data.get("from") || "").trim(),
+      to: String(data.get("to") || "").trim()
+    });
+  }
+
+  async function palaceChangeSettlementPage(page) {
+    await palaceRefreshSettlementSnapshot({ page: Math.max(1, Number(page || 1)) });
+  }
+
+  async function palaceViewSettlementDetail(recordId) {
+    palaceState.settlementDetailLoading = true;
+    palaceState.settlementDetailError = "";
+    palaceState.settlementDetailId = String(recordId || "");
+    renderChatPanel();
+    try {
+      const payload = await palaceApi("/settlement-records/" + encodeURIComponent(recordId));
+      palaceState.settlementDetail = payload.detail || null;
+    } catch (error) {
+      palaceState.settlementDetail = null;
+      palaceState.settlementDetailError = error instanceof Error ? error.message : "Unable to load settlement detail";
+    } finally {
+      palaceState.settlementDetailLoading = false;
+      if (uiState.activeTab === "palaceOperations") {
+        renderChatPanel();
+      }
+    }
+  }
+
+  function palaceCloseSettlementDetail() {
+    palaceState.settlementDetail = null;
+    palaceState.settlementDetailId = "";
+    palaceState.settlementDetailError = "";
+    palaceState.settlementDetailLoading = false;
+    if (uiState.activeTab === "palaceOperations") {
+      renderChatPanel();
+    }
+  }
+
+  function palaceRenderSettlementDetail() {
+    if (palaceState.settlementDetailLoading) {
+      return '<div class="palace-native-detail-shell"><p class="palace-native-copy">Loading settlement detail…</p></div>';
+    }
+    if (palaceState.settlementDetailError) {
+      return '<div class="palace-native-detail-shell"><p class="dashboard-feedback is-error">' + escapeHtml(palaceState.settlementDetailError) + "</p></div>";
+    }
+    if (!palaceState.settlementDetail) {
+      return "";
+    }
+    const detail = palaceState.settlementDetail;
+    const ledgerRows = Array.isArray(detail.ledgerTransactions)
+      ? detail.ledgerTransactions.map(function (row) {
+          return [
+            "<tr>",
+            "<td>" + escapeHtml(row.createdAt ? formatDateTime(row.createdAt) : "—") + "</td>",
+            "<td>" + escapeHtml(row.type || "") + "</td>",
+            '<td class="palace-native-table__num">' + palaceFormatAmount(row.amount) + "</td>",
+            "<td>" + escapeHtml(row.operatorName || "") + "</td>",
+            "<td>" + escapeHtml((row.notes || row.openingMode || "—").slice ? (row.notes || row.openingMode || "—").slice(0, 120) : (row.notes || row.openingMode || "—")) + "</td>",
+            "</tr>"
+          ].join("");
+        }).join("")
+      : "";
+    return [
+      '<div class="palace-native-detail-shell">',
+      '<div class="dashboard-panel__meta"><h3 class="dashboard-panel__title">Settlement detail</h3><div class="palace-native-actions"><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-settlement-close">Close</button><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="open-palace-external">Open legacy detail</button></div></div>',
+      '<div class="palace-native-detail-grid">',
+      '<div class="palace-native-detail-card"><span class="palace-native-detail-label">Customer</span><strong>' + escapeHtml((detail.customer && detail.customer.displayName) || "—") + '</strong><small>' + escapeHtml((detail.customer && detail.customer.accountNumber) || "—") + "</small></div>",
+      '<div class="palace-native-detail-card"><span class="palace-native-detail-label">Principal</span><strong>' + palaceFormatAmount(detail.record && detail.record.principalAmount) + '</strong><small>Initial ' + palaceFormatAmount(detail.record && detail.record.initialPrincipalAmount) + " / Add-on " + palaceFormatAmount(detail.record && detail.record.addOnAmount) + "</small></div>",
+      '<div class="palace-native-detail-card"><span class="palace-native-detail-label">Rolling After</span><strong>' + palaceFormatAmount(detail.record && detail.record.rollingAfter) + '</strong><small>Win/Loss ' + palaceFormatAmount(detail.record && detail.record.winLoss) + "</small></div>",
+      '<div class="palace-native-detail-card"><span class="palace-native-detail-label">Session</span><strong>' + escapeHtml((detail.session && detail.session.openingChipCategory) || "—") + '</strong><small>' + escapeHtml((detail.session && detail.session.id) || "—") + "</small></div>",
+      "</div>",
+      '<div class="palace-native-detail-grid palace-native-detail-grid--wide">',
+      '<div class="palace-native-detail-card"><span class="palace-native-detail-label">Settlement split</span><strong>Cash Out ' + palaceFormatAmount(detail.record && detail.record.cashOut) + '</strong><small>Back To Account ' + palaceFormatAmount(detail.record && detail.record.depositBack) + " / Credit Repay " + palaceFormatAmount(detail.record && detail.record.creditRepay) + "</small></div>",
+      '<div class="palace-native-detail-card"><span class="palace-native-detail-label">Notes</span><strong>' + escapeHtml(detail.settlementOperator || "—") + '</strong><small>' + escapeHtml(detail.settlementNotes || "—") + "</small></div>",
+      "</div>",
+      '<div class="palace-native-table-wrap"><table class="palace-native-table"><thead><tr><th>Time</th><th>Type</th><th>Amount</th><th>Operator</th><th>Notes</th></tr></thead><tbody>' + (ledgerRows || '<tr><td colspan="5">No ledger rows.</td></tr>') + "</tbody></table></div>",
+      "</div>"
+    ].join("");
+  }
+
+  function renderPalaceOperationsPanel() {
+    const statusChip = palaceState.connected
+      ? renderChatChip("Session", palaceState.staffAccount || palaceState.operatorName || "Connected")
+      : renderChatChip("Session", "Not connected");
+    const loadingChip = renderChatChip("Status", palaceState.loading ? "Syncing" : palaceState.pending ? "Submitting" : "Ready");
+    const customerChip = renderChatChip("Customers", String(palaceState.customers.length || 0));
+    const txChip = renderChatChip("Today Rows", String(palaceState.transactions.length || 0));
+    const options = palaceCustomerOptions();
+    const formBody = palaceState.connected
+      ? [
+          '<form id="palaceOperationForm" class="palace-native-form">',
+          '<div class="palace-native-tabs">',
+          '<button type="button" class="palace-native-tab' + (palaceState.operation === "deposit" ? " is-active" : "") + '" data-palace-operation="deposit">Deposit</button>',
+          '<button type="button" class="palace-native-tab' + (palaceState.operation === "withdraw" ? " is-active" : "") + '" data-palace-operation="withdraw">Withdraw</button>',
+          '<button type="button" class="palace-native-tab' + (palaceState.operation === "transfer" ? " is-active" : "") + '" data-palace-operation="transfer">Transfer</button>',
+          "</div>",
+          '<input type="hidden" name="operation" value="' + escapeHtml(palaceState.operation) + '">',
+          palaceState.operation === "transfer"
+            ? [
+                '<label class="dashboard-form-label">From<select class="dashboard-select" name="fromCustomerId" required><option value="">Select account</option>' + options + "</select></label>",
+                '<label class="dashboard-form-label">To<select class="dashboard-select" name="toCustomerId" required><option value="">Select account</option>' + options + "</select></label>"
+              ].join("")
+            : '<label class="dashboard-form-label">Customer<select class="dashboard-select" name="customerId" required><option value="">Select account</option>' + options + "</select></label>",
+          '<div class="palace-native-grid">',
+          '<label class="dashboard-form-label">Amount<input class="dashboard-input" name="amount" type="number" min="0" step="0.01" placeholder="0.00" required></label>',
+          '<label class="dashboard-form-label">Currency<select class="dashboard-select" name="currency">' + palaceCurrencyOptions() + "</select></label>",
+          "</div>",
+          '<label class="dashboard-form-label">Remarks<textarea class="palace-native-textarea" name="remarks" rows="3" placeholder="Link agents, reason, table flow, or settlement context."></textarea></label>',
+          '<div class="palace-native-actions">',
+          '<button type="submit" class="dashboard-button dashboard-button--accent"' + (palaceState.pending ? " disabled" : "") + '>Submit ' + escapeHtml(palaceState.operation) + "</button>",
+          '<button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-native-refresh"' + (palaceState.loading ? " disabled" : "") + ">Refresh</button>",
+          '<button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-native-logout"' + (palaceState.pending ? " disabled" : "") + ">Disconnect</button>",
+          "</div>",
+          "</form>"
+        ].join("")
+      : [
+          '<form id="palaceLoginForm" class="palace-native-form palace-native-form--login">',
+          '<label class="dashboard-form-label">Palace Account<input class="dashboard-input" name="staffAccount" value="admin" autocomplete="username"></label>',
+          '<label class="dashboard-form-label">Palace Password<input class="dashboard-input" name="password" type="password" autocomplete="current-password"></label>',
+          '<div class="palace-native-actions">',
+          '<button type="submit" class="dashboard-button dashboard-button--accent"' + (palaceState.pending ? " disabled" : "") + ">Connect Palace</button>",
+          '<button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="open-palace-external">Open Full System</button>',
+          "</div>",
+          "</form>"
+        ].join("");
+
+    const rows = palaceState.transactions.slice(0, 12).map(function (row) {
+      return [
+        "<tr>",
+        "<td>" + escapeHtml(row.accountNumber || "") + "</td>",
+        "<td>" + escapeHtml(row.customerName || "") + "</td>",
+        "<td>" + escapeHtml(row.transactionType || "") + "</td>",
+        "<td>" + escapeHtml(row.currency || "") + "</td>",
+        '<td class="palace-native-table__num">' + escapeHtml(String(row.amount || "")) + "</td>",
+        "<td>" + escapeHtml((row.remarks || "").slice(0, 120) || "—") + "</td>",
+        "</tr>"
+      ].join("");
+    }).join("");
+
+    return [
+      '<div class="palace-native-stack">',
+      '<section class="palace-native-surface">',
+      '<div class="palace-native-header">',
+      '<div>',
+      '<h3 class="palace-native-title">' + escapeHtml(t("palaceTitle")) + "</h3>",
+      '<p class="palace-native-copy">' + escapeHtml(t("palaceLead")) + "</p>",
+      "</div>",
+      '<div class="dashboard-chat-chip-grid">' + statusChip + loadingChip + customerChip + txChip + "</div>",
+      "</div>",
+      palaceState.error ? '<p class="dashboard-feedback is-error">' + escapeHtml(palaceState.error) + "</p>" : "",
+      palaceState.success ? '<p class="dashboard-feedback is-success">' + escapeHtml(palaceState.success) + "</p>" : "",
+      formBody,
+      "</section>",
+      '<section class="palace-native-surface">',
+      '<div class="dashboard-panel__meta"><h3 class="dashboard-panel__title">Recent transaction history</h3><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="open-palace-external">Open legacy</button></div>',
+      palaceState.transactions.length
+        ? '<div class="palace-native-table-wrap"><table class="palace-native-table"><thead><tr><th>Acct</th><th>Name</th><th>Type</th><th>Cur</th><th>Amount</th><th>Remarks</th></tr></thead><tbody>' + rows + "</tbody></table></div>"
+        : '<div class="dashboard-empty">No transaction rows loaded yet.</div>',
+      "</section>",
+      "</div>"
+    ].join("");
+  }
+
+  function renderPalaceOperationsPanelV2() {
+    const statusChip = palaceState.connected
+      ? renderChatChip("Session", palaceState.staffAccount || palaceState.operatorName || "Connected")
+      : renderChatChip("Session", "Not connected");
+    const loadingChip = renderChatChip("Status", palaceState.loading ? "Syncing" : palaceState.pending ? "Submitting" : "Ready");
+    const customerChip = renderChatChip("Customers", String(palaceState.customers.length || 0));
+    const txChip = renderChatChip("Today Rows", String(palaceState.transactions.length || 0));
+    const creditChip = renderChatChip("Credit Rows", String(palaceState.creditRecords.length || 0));
+    const consumptionChip = renderChatChip("Consumption Rows", String(palaceState.consumptionRecords.length || 0));
+    const sessionChip = renderChatChip("Active Sessions", String(palaceState.gameSessions.length || 0));
+    const settlementChip = renderChatChip("Settlements", String(palaceState.settlementRows.length || 0));
+    const options = palaceCustomerOptions();
+    const fields = renderPalaceOperationFields({
+      operation: palaceState.operation,
+      customerOptionsHtml: options,
+      currencyOptionsHtml: palaceCurrencyOptions()
+    });
+    const formBody = palaceState.connected
+      ? [
+          '<form id="palaceOperationForm" class="palace-native-form">',
+          '<div class="palace-native-tabs">',
+          palaceOperationButton("deposit", "Deposit"),
+          palaceOperationButton("withdraw", "Withdraw"),
+          palaceOperationButton("transfer", "Transfer"),
+          palaceOperationButton("gameStart", "Game Start"),
+          palaceOperationButton("creditSignout", "Credit Out"),
+          palaceOperationButton("creditRepay", "Credit Repay"),
+          palaceOperationButton("consumption", "Consumption"),
+          "</div>",
+          '<input type="hidden" name="operation" value="' + escapeHtml(palaceState.operation) + '">',
+          fields,
+          '<label class="dashboard-form-label">Remarks<textarea class="palace-native-textarea" name="remarks" rows="3" placeholder="Link agents, reason, table flow, or settlement context."></textarea></label>',
+          '<div class="palace-native-actions">',
+          '<button type="submit" class="dashboard-button dashboard-button--accent"' + (palaceState.pending ? " disabled" : "") + ">" + escapeHtml(getPalaceOperationSubmitLabel(palaceState.operation)) + "</button>",
+          '<button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-native-refresh"' + (palaceState.loading ? " disabled" : "") + ">Refresh</button>",
+          '<button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-native-logout"' + (palaceState.pending ? " disabled" : "") + ">Disconnect</button>",
+          "</div>",
+          "</form>"
+        ].join("")
+      : [
+          '<form id="palaceLoginForm" class="palace-native-form palace-native-form--login">',
+          '<label class="dashboard-form-label">Palace Account<input class="dashboard-input" name="staffAccount" value="admin" autocomplete="username"></label>',
+          '<label class="dashboard-form-label">Palace Password<input class="dashboard-input" name="password" type="password" autocomplete="current-password"></label>',
+          '<div class="palace-native-actions">',
+          '<button type="submit" class="dashboard-button dashboard-button--accent"' + (palaceState.pending ? " disabled" : "") + ">Connect Palace</button>",
+          '<button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="open-palace-external">Open Full System</button>',
+          "</div>",
+          "</form>"
+        ].join("");
+
+    const transactionRows = palaceRenderRows(palaceState.transactions.slice(0, 12), [
+      { key: "accountNumber" },
+      { key: "customerName" },
+      { key: "transactionType" },
+      { key: "currency" },
+      { key: "amount", numeric: true },
+      { value: function (row) { return (row.remarks || "").slice(0, 120) || "—"; } }
+    ]);
+    const creditRows = renderPalaceCreditRows(palaceState.creditRecords, { pending: palaceState.pending });
+    const consumptionRows = renderPalaceConsumptionRows(palaceState.consumptionRecords, { pending: palaceState.pending });
+    const sessionRows = renderPalaceSessionRows(palaceState.gameSessions, { pending: palaceState.pending, formatDateTime });
+    const settlementQuery = palaceBuildSettlementQuery();
+    const settlementRows = renderPalaceSettlementRows(palaceState.settlementRows, { detailLoading: palaceState.settlementDetailLoading, formatDateTime });
+
+    return [
+      '<div class="palace-native-stack">',
+      '<section class="palace-native-surface">',
+      '<div class="palace-native-header">',
+      '<div>',
+      '<h3 class="palace-native-title">' + escapeHtml(t("palaceTitle")) + "</h3>",
+      '<p class="palace-native-copy">' + escapeHtml(t("palaceLead")) + "</p>",
+      "</div>",
+      '<div class="dashboard-chat-chip-grid">' + statusChip + loadingChip + customerChip + txChip + creditChip + consumptionChip + sessionChip + settlementChip + "</div>",
+      "</div>",
+      palaceState.error ? '<p class="dashboard-feedback is-error">' + escapeHtml(palaceState.error) + "</p>" : "",
+      palaceState.success ? '<p class="dashboard-feedback is-success">' + escapeHtml(palaceState.success) + "</p>" : "",
+      formBody,
+      "</section>",
+      '<section class="palace-native-surface">',
+      '<div class="dashboard-panel__meta"><h3 class="dashboard-panel__title">Active game sessions</h3></div>',
+      '<div class="palace-native-grid">',
+      '<label class="dashboard-form-label">Customer filter<select id="palaceSessionCustomerSelect" class="dashboard-select">' + palaceSessionCustomerOptions() + "</select></label>",
+      '<div class="palace-native-actions"><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-sessions-refresh"' + (palaceState.loading ? " disabled" : "") + '>Load sessions</button><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-sessions-reset"' + (palaceState.loading ? " disabled" : "") + ">Clear</button></div>",
+      "</div>",
+      palaceState.gameSessions.length
+        ? '<div class="palace-native-table-wrap"><table class="palace-native-table"><thead><tr><th>Acct</th><th>Name</th><th>Mode</th><th>Cur</th><th>Open</th><th>Playable</th><th>Opened</th><th>Action</th></tr></thead><tbody>' + sessionRows + "</tbody></table></div>"
+        : '<div class="dashboard-empty">No active sessions loaded for this filter.</div>',
+      "</section>",
+      palaceRenderSessionSettlementForm(),
+      palaceRenderSessionMidExchangeForm(),
+      palaceRenderSessionTipForm(),
+      '<section class="palace-native-surface">',
+      '<div class="dashboard-panel__meta"><h3 class="dashboard-panel__title">Recent transaction history</h3><div class="palace-native-actions"><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-export-transactions">Export transactions</button><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="open-palace-external">Open legacy</button></div></div>',
+      palaceState.transactions.length
+        ? '<div class="palace-native-table-wrap"><table class="palace-native-table"><thead><tr><th>Acct</th><th>Name</th><th>Type</th><th>Cur</th><th>Amount</th><th>Remarks</th></tr></thead><tbody>' + transactionRows + "</tbody></table></div>"
+        : '<div class="dashboard-empty">No transaction rows loaded yet.</div>',
+      "</section>",
+      '<section class="palace-native-surface">',
+      '<div class="dashboard-panel__meta"><h3 class="dashboard-panel__title">Settlement reports</h3><div class="palace-native-actions"><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="palace-export-settlements">Export settlements</button><button type="button" class="dashboard-button dashboard-button--ghost" data-chat-action="open-palace-external">Open settlement workspace</button></div></div>',
+      '<p class="palace-native-copy">Settlement list is now sourced from the live Palace dashboard snapshot, and row detail comes from the confirmed settlement detail API.</p>',
+      renderPalaceSettlementFiltersForm(settlementQuery.filters, { loading: palaceState.loading }),
+      palaceState.settlementRows.length
+        ? '<div class="palace-native-table-wrap"><table class="palace-native-table"><thead><tr><th>Settled</th><th>Acct</th><th>Name</th><th>Guest</th><th>Principal</th><th>Rolling</th><th>Cash Out</th><th>Deposit</th><th>Repay</th><th>Win/Loss</th><th>Chip</th><th>Action</th></tr></thead><tbody>' + settlementRows + "</tbody></table></div>"
+        : '<div class="dashboard-empty">' + escapeHtml(palaceState.settlementEmptyLabel) + "</div>",
+      renderPalaceSettlementPager({
+        page: palaceState.settlementPage,
+        totalPages: palaceState.settlementTotalPages,
+        total: palaceState.settlementTotal,
+        loading: palaceState.loading
+      }),
+      palaceRenderSettlementDetail(),
+      "</section>",
+      '<section class="palace-native-surface">',
+      '<div class="dashboard-panel__meta"><h3 class="dashboard-panel__title">Recent credit records</h3></div>',
+      palaceState.creditRecords.length
+        ? '<div class="palace-native-table-wrap"><table class="palace-native-table"><thead><tr><th>Acct</th><th>Name</th><th>Type</th><th>Cur</th><th>Amount</th><th>Remarks</th><th>Action</th></tr></thead><tbody>' + creditRows + "</tbody></table></div>"
+        : '<div class="dashboard-empty">No credit rows loaded yet.</div>',
+      "</section>",
+      '<section class="palace-native-surface">',
+      '<div class="dashboard-panel__meta"><h3 class="dashboard-panel__title">Recent consumption records</h3></div>',
+      palaceState.consumptionRecords.length
+        ? '<div class="palace-native-table-wrap"><table class="palace-native-table"><thead><tr><th>Acct</th><th>Name</th><th>Type</th><th>Cur</th><th>Amount</th><th>Remarks</th><th>Action</th></tr></thead><tbody>' + consumptionRows + "</tbody></table></div>"
+        : '<div class="dashboard-empty">No consumption rows loaded yet.</div>',
+      "</section>",
+      "</div>"
+    ].join("");
+  }
+
   renderAll();
   bindEvents();
   startLiveClockTicker();
@@ -1567,11 +2849,263 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       }
 
       const button = event.target.closest("[data-chat-action='open-external']");
-      if (!button) {
+      if (button) {
+        window.open(CHI_CHI_URL, "_blank", "noopener,noreferrer");
         return;
       }
 
-      window.open(CHI_CHI_URL, "_blank", "noopener,noreferrer");
+      const palaceOpenButton = event.target.closest("[data-chat-action='open-palace-external']");
+      if (palaceOpenButton) {
+        window.open(PALACE_URL, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      const palaceReloadButton = event.target.closest("[data-chat-action='reload-palace-frame']");
+      if (palaceReloadButton) {
+        const frame = document.getElementById("palaceOpsFrame");
+        if (frame) {
+          frame.src = PALACE_URL;
+        }
+        return;
+      }
+
+      const palaceRefreshButton = event.target.closest("[data-chat-action='palace-native-refresh']");
+      if (palaceRefreshButton) {
+        void palaceRefreshAll();
+        return;
+      }
+
+      const palaceSessionRefreshButton = event.target.closest("[data-chat-action='palace-sessions-refresh']");
+      if (palaceSessionRefreshButton) {
+        void palaceRefreshSessionsFromDom();
+        return;
+      }
+
+      const palaceSessionsResetButton = event.target.closest("[data-chat-action='palace-sessions-reset']");
+      if (palaceSessionsResetButton) {
+        const select = document.getElementById("palaceSessionCustomerSelect");
+        if (select) {
+          select.value = "";
+        }
+        void palaceRefreshSessionsFromDom();
+        return;
+      }
+
+      const palaceSessionSettleButton = event.target.closest("[data-chat-action='palace-session-settle']");
+      if (palaceSessionSettleButton) {
+        const sessionId = palaceSessionSettleButton.getAttribute("data-session-id");
+        if (sessionId) {
+          palaceOpenSessionSettlement(sessionId);
+        }
+        return;
+      }
+
+      const palaceSessionQuickCloseButton = event.target.closest("[data-chat-action='palace-session-quick-close']");
+      if (palaceSessionQuickCloseButton) {
+        const sessionId = palaceSessionQuickCloseButton.getAttribute("data-session-id");
+        if (sessionId) {
+          void palaceQuickCloseSession(sessionId);
+        }
+        return;
+      }
+
+      const palaceSessionLegacySettleButton = event.target.closest("[data-chat-action='palace-session-legacy-settle']");
+      if (palaceSessionLegacySettleButton) {
+        const sessionId = palaceSessionLegacySettleButton.getAttribute("data-session-id");
+        if (sessionId) {
+          palaceOpenLegacySessionPath(palaceLegacySessionPath(sessionId, "settle"));
+        }
+        return;
+      }
+
+      const palaceSessionMidButton = event.target.closest("[data-chat-action='palace-session-mid']");
+      if (palaceSessionMidButton) {
+        const sessionId = palaceSessionMidButton.getAttribute("data-session-id");
+        if (sessionId) {
+          palaceOpenSessionMidExchange(sessionId);
+        }
+        return;
+      }
+
+      const palaceSessionTipButton = event.target.closest("[data-chat-action='palace-session-tip']");
+      if (palaceSessionTipButton) {
+        const sessionId = palaceSessionTipButton.getAttribute("data-session-id");
+        if (sessionId) {
+          palaceOpenSessionTip(sessionId);
+        }
+        return;
+      }
+
+      const palaceSessionLegacyMidButton = event.target.closest("[data-chat-action='palace-session-legacy-mid']");
+      if (palaceSessionLegacyMidButton) {
+        const sessionId = palaceSessionLegacyMidButton.getAttribute("data-session-id");
+        if (sessionId) {
+          palaceOpenLegacySessionPath(palaceLegacySessionPath(sessionId, "mid"));
+        }
+        return;
+      }
+
+      const palaceSessionLegacyTipButton = event.target.closest("[data-chat-action='palace-session-legacy-tip']");
+      if (palaceSessionLegacyTipButton) {
+        const sessionId = palaceSessionLegacyTipButton.getAttribute("data-session-id");
+        if (sessionId) {
+          palaceOpenLegacySessionPath(palaceLegacySessionPath(sessionId, "tip"));
+        }
+        return;
+      }
+
+      const palaceSessionSettleCloseButton = event.target.closest("[data-chat-action='palace-session-settle-close']");
+      if (palaceSessionSettleCloseButton) {
+        palaceCloseSessionSettlement();
+        return;
+      }
+
+      const palaceSessionSettleZeroButton = event.target.closest("[data-chat-action='palace-session-settle-zero']");
+      if (palaceSessionSettleZeroButton) {
+        const form = document.getElementById("palaceSessionSettlementForm");
+        if (form) {
+          Array.from(form.querySelectorAll("input[type='number']")).forEach(function (field) {
+            field.value = "0";
+          });
+          const select = form.querySelector("select[name='tipTargetType']");
+          if (select) {
+            select.value = "STAFF";
+          }
+        }
+        return;
+      }
+
+      const palaceSessionMidCloseButton = event.target.closest("[data-chat-action='palace-session-mid-close']");
+      if (palaceSessionMidCloseButton) {
+        palaceCloseSessionMidExchange();
+        return;
+      }
+
+      const palaceSessionMidZeroButton = event.target.closest("[data-chat-action='palace-session-mid-zero']");
+      if (palaceSessionMidZeroButton) {
+        const form = document.getElementById("palaceSessionMidForm");
+        if (form) {
+          Array.from(form.querySelectorAll("input[type='number']")).forEach(function (field) {
+            field.value = "0";
+          });
+          const select = form.querySelector("select[name='kind']");
+          if (select) {
+            select.value = "CASH_OUT";
+          }
+        }
+        return;
+      }
+
+      const palaceSessionTipCloseButton = event.target.closest("[data-chat-action='palace-session-tip-close']");
+      if (palaceSessionTipCloseButton) {
+        palaceCloseSessionTip();
+        return;
+      }
+
+      const palaceSessionTipZeroButton = event.target.closest("[data-chat-action='palace-session-tip-zero']");
+      if (palaceSessionTipZeroButton) {
+        const form = document.getElementById("palaceSessionTipForm");
+        if (form) {
+          Array.from(form.querySelectorAll("input[type='number']")).forEach(function (field) {
+            field.value = "0";
+          });
+          const select = form.querySelector("select[name='targetType']");
+          if (select) {
+            select.value = "STAFF";
+          }
+        }
+        return;
+      }
+
+      const palaceExportTransactionsButton = event.target.closest("[data-chat-action='palace-export-transactions']");
+      if (palaceExportTransactionsButton) {
+        palaceOpenExport("/exports/transactions?period=daily&page=1");
+        return;
+      }
+
+      const palaceExportSettlementsButton = event.target.closest("[data-chat-action='palace-export-settlements']");
+      if (palaceExportSettlementsButton) {
+        palaceOpenExport("/exports/settlement-records?" + palaceBuildSettlementQuery().query);
+        return;
+      }
+
+      const palaceSettlementResetButton = event.target.closest("[data-chat-action='palace-settlement-reset']");
+      if (palaceSettlementResetButton) {
+        const settlementForm = document.getElementById("palaceSettlementFiltersForm");
+        if (settlementForm) {
+          settlementForm.reset();
+        }
+        void palaceRefreshSettlementFromForm(settlementForm, true);
+        return;
+      }
+
+      const palaceSettlementPageButton = event.target.closest("[data-chat-action='palace-settlement-page']");
+      if (palaceSettlementPageButton) {
+        const nextPage = palaceSettlementPageButton.getAttribute("data-page");
+        if (nextPage) {
+          void palaceChangeSettlementPage(nextPage);
+        }
+        return;
+      }
+
+      const palaceSettlementViewButton = event.target.closest("[data-chat-action='palace-settlement-view']");
+      if (palaceSettlementViewButton) {
+        const recordId = palaceSettlementViewButton.getAttribute("data-record-id");
+        if (recordId) {
+          void palaceViewSettlementDetail(recordId);
+        }
+        return;
+      }
+
+      const palaceSettlementCloseButton = event.target.closest("[data-chat-action='palace-settlement-close']");
+      if (palaceSettlementCloseButton) {
+        palaceCloseSettlementDetail();
+        return;
+      }
+
+      const palaceCreditVoidButton = event.target.closest("[data-chat-action='palace-credit-void']");
+      if (palaceCreditVoidButton) {
+        const recordId = palaceCreditVoidButton.getAttribute("data-record-id");
+        if (recordId) {
+          void palaceVoidCredit(recordId);
+        }
+        return;
+      }
+
+      const palaceConsumptionSettleButton = event.target.closest("[data-chat-action='palace-consumption-settle']");
+      if (palaceConsumptionSettleButton) {
+        const recordId = palaceConsumptionSettleButton.getAttribute("data-record-id");
+        if (recordId) {
+          void palaceSettleConsumption(recordId);
+        }
+        return;
+      }
+
+      const palaceConsumptionVoidButton = event.target.closest("[data-chat-action='palace-consumption-void']");
+      if (palaceConsumptionVoidButton) {
+        const recordId = palaceConsumptionVoidButton.getAttribute("data-record-id");
+        if (recordId) {
+          void palaceVoidConsumption(recordId);
+        }
+        return;
+      }
+
+      const palaceLogoutButton = event.target.closest("[data-chat-action='palace-native-logout']");
+      if (palaceLogoutButton) {
+        void palaceDisconnect();
+        return;
+      }
+
+      const palaceOperationButton = event.target.closest("[data-palace-operation]");
+      if (palaceOperationButton) {
+        palaceState.operation = palaceOperationButton.getAttribute("data-palace-operation") || "deposit";
+        palaceState.error = "";
+        palaceState.success = "";
+        renderChatPanel();
+        return;
+      }
+
+      return;
     });
 
     chatBody.addEventListener("input", function (event) {
@@ -1607,6 +3141,48 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 
       const salaryForm = event.target.closest("#dashboardSalaryForm");
       if (!salaryForm) {
+        const palaceLoginForm = event.target.closest("#palaceLoginForm");
+        if (palaceLoginForm) {
+          event.preventDefault();
+          void palaceConnect(palaceLoginForm);
+          return;
+        }
+
+        const palaceOperationForm = event.target.closest("#palaceOperationForm");
+        if (palaceOperationForm) {
+          event.preventDefault();
+          void palaceSubmitOperation(palaceOperationForm);
+          return;
+        }
+
+        const palaceSettlementFiltersForm = event.target.closest("#palaceSettlementFiltersForm");
+        if (palaceSettlementFiltersForm) {
+          event.preventDefault();
+          void palaceRefreshSettlementFromForm(palaceSettlementFiltersForm, false);
+          return;
+        }
+
+        const palaceSessionSettlementForm = event.target.closest("#palaceSessionSettlementForm");
+        if (palaceSessionSettlementForm) {
+          event.preventDefault();
+          void palaceSubmitSessionSettlement(palaceSessionSettlementForm);
+          return;
+        }
+
+        const palaceSessionMidForm = event.target.closest("#palaceSessionMidForm");
+        if (palaceSessionMidForm) {
+          event.preventDefault();
+          void palaceSubmitSessionMidExchange(palaceSessionMidForm);
+          return;
+        }
+
+        const palaceSessionTipForm = event.target.closest("#palaceSessionTipForm");
+        if (palaceSessionTipForm) {
+          event.preventDefault();
+          void palaceSubmitSessionTip(palaceSessionTipForm);
+          return;
+        }
+
         return;
       }
 
@@ -1719,6 +3295,11 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
     renderDetailPanel();
     if (uiState.activeTab === "pdfMaker") {
       window.requestAnimationFrame(renderPdfDocument);
+    }
+    if (uiState.activeTab === "palaceOperations" && !palaceState.bootstrapped) {
+      window.requestAnimationFrame(function () {
+        void palaceEnsureBoot();
+      });
     }
   }
 
@@ -2092,6 +3673,13 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       return;
     }
 
+    if (uiState.activeTab === "palaceOperations") {
+      chatTitle.textContent = t("palaceTitle");
+      chatBadge.textContent = t("palaceBadge");
+      chatBody.innerHTML = renderPalaceOperationsPanelV2();
+      return;
+    }
+
     chatTitle.textContent = i18n.t("home.welcome");
     chatBadge.textContent = "Ready";
     chatBody.innerHTML = [
@@ -2205,6 +3793,18 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 
       const avFile = document.getElementById("ita-av-file");
       if (avFile) avFile.addEventListener("change", function() { itaOnAvatarChange(avFile); });
+      return;
+    }
+
+    if (uiState.activeTab === "palaceOperations") {
+      detailTitle.textContent = t("palaceTitle");
+      detailBody.innerHTML = [
+        '<div class="palace-side-stack">',
+        renderStaticPanel(t("palaceScopeTitle"), t("palaceScopeBody")),
+        renderStaticPanel(t("palaceLoginTitle"), t("palaceLoginBody")),
+        renderStaticPanel(t("palaceFallbackTitle"), t("palaceFallbackBody")),
+        "</div>"
+      ].join("");
       return;
     }
 
@@ -3642,6 +5242,20 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       String(date.getMonth() + 1).padStart(2, "0"),
       String(date.getDate()).padStart(2, "0")
     ].join("-");
+  }
+
+  function formatDateTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return String(value || "");
+    }
+    return date.toLocaleString("zh-Hant", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
   }
 
   function classifyShiftStatus(window, currentMinutes, isOvernightCarry) {
