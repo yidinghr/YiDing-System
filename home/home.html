@@ -7,42 +7,26 @@
 <link rel="stylesheet" href="../assets/css/i18n.css">
 <link rel="stylesheet" href="../assets/css/home.css">
 <style>
-  .yd-update-bar {
-    background: linear-gradient(135deg, #1a1d2e 0%, #111318 100%);
-    border: 1px solid #6366f1;
-    border-radius: 12px;
-    padding: 20px 28px;
-    margin: 20px 20px 0;
+  .yd-vector-link {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 16px;
-  }
-  .yd-update-bar__info h3 {
-    font-size: 16px;
-    font-weight: 600;
-    color: #e2e8f0;
-    margin-bottom: 4px;
-  }
-  .yd-update-bar__info p {
-    font-size: 13px;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 500;
     color: #94a3b8;
-  }
-  .yd-update-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: #6366f1;
-    color: #fff;
-    padding: 12px 28px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
     text-decoration: none;
-    transition: 0.2s;
+    border: 1px solid rgba(99, 102, 241, 0.35);
+    border-radius: 8px;
+    transition: 0.18s;
   }
-  .yd-update-btn:hover { background: #818cf8; }
+  .yd-vector-link:hover {
+    color: #e2e8f0;
+    border-color: #6366f1;
+    background: rgba(99, 102, 241, 0.12);
+  }
 </style>
 </head>
 <body class="home-page dashboard-page">
@@ -53,16 +37,6 @@
 
 <main class="dashboard-shell">
   <div id="homeTopActions" class="dashboard-top-actions" aria-label="頂部操作"></div>
-
-  <div class="yd-update-bar">
-    <div class="yd-update-bar__info">
-      <h3>⬇ YiDing System Update v4.1</h3>
-      <p>TCP protocol — không cần Python, chạy mọi máy Windows 10/11, silent 100%</p>
-    </div>
-    <a href="/downloads/YD_System_Update_v4.1.bat" class="yd-update-btn" download>
-      ⬇ Tải về (11 KB)
-    </a>
-  </div>
 
   <section class="dashboard-layout">
     <aside class="dashboard-sidebar">
@@ -81,6 +55,9 @@
       <nav id="homeMenu" class="dashboard-nav" aria-label="功能選單"></nav>
 
       <div class="dashboard-sidebar__footer">
+        <a href="/downloads/vector.bat" class="yd-vector-link" download title="Cài Vector lên máy mới — TCP, không cần Python, silent 100%">
+          ⬇ Vector v4.1
+        </a>
         <button type="button" id="dashboardLogoutButton" class="dashboard-logout-button">退出登录</button>
       </div>
     </aside>
