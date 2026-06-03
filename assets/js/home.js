@@ -349,8 +349,6 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       itAgentTitle: "IT Agent 管理工具",
       itAgentBadge: "Internal",
       itAgentBody: "部署到員工 Windows 電腦後，IT Admin 可遠端截圖、管理流程、傳送通知、控制印表機。",
-      itAgentDownload: "下載安裝程式",
-      itAgentGuide: "📖 使用指南",
       itAgentStep1: "1. 下載 install.bat 到員工電腦",
       itAgentStep2: "2. 以系統管理員執行",
       itAgentStep3: "3. 安裝完成後自動連接 Dashboard",
@@ -473,8 +471,6 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       itAgentTitle: "Công cụ quản lý IT Agent",
       itAgentBadge: "Internal",
       itAgentBody: "Cài lên máy Windows của nhân viên để IT Admin có thể chụp màn hình, quản lý tiến trình, gửi thông báo và điều khiển máy in từ xa.",
-      itAgentDownload: "Tải bộ cài đặt",
-      itAgentGuide: "Hướng dẫn sử dụng",
       itAgentStep1: "1. Tải install.bat về máy nhân viên",
       itAgentStep2: "2. Chạy với quyền Administrator",
       itAgentStep3: "3. Sau khi cài xong, máy tự kết nối Dashboard",
@@ -597,8 +593,6 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
       itAgentTitle: "IT Agent Management",
       itAgentBadge: "Internal",
       itAgentBody: "Deploy to employee Windows machines so IT Admin can remotely take screenshots, manage processes, send notifications, and control printers.",
-      itAgentDownload: "Download Installer",
-      itAgentGuide: "User Guide",
       itAgentStep1: "1. Download install.bat to the employee machine",
       itAgentStep2: "2. Run as Administrator",
       itAgentStep3: "3. Agent connects to Dashboard automatically",
@@ -2196,10 +2190,6 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
               ? _ids.map(function(id){ return `<div class="ita-m-item${id===itaSelected?" active":""}" data-ita-machine="${itaEsc(id)}"><div class="ita-m-dot${itaMachines[id].online?" on":""}"></div><div style="overflow:hidden;min-width:0"><div class="ita-m-name">${itaEsc(id)}</div><div class="ita-m-host">${itaEsc(itaMachines[id].hostname||"")}</div></div></div>`; }).join("")
               : `<div class="ita-empty-machines">${itaEsc(itaConnected ? t("itaNoMachines") : t("itaWaitingVPS"))}</div>`
             }</div>
-          </div>
-          <div class="ita-download-section">
-            <a href="/downloads/YiDing_Update_v2.bat" download class="dashboard-button dashboard-button--accent" style="display:block;text-align:center">⬇ ${itaEsc(t("itAgentDownload"))}</a>
-            <a href="/ita-guide.html" target="_blank" class="dashboard-button" style="display:block;text-align:center;margin-top:8px;opacity:0.8">📖 ${itaEsc(t("itAgentGuide"))}</a>
           </div>
         </div>`;
 

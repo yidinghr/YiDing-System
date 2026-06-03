@@ -2059,7 +2059,3 @@ body[data-dashboard-tab="salary"] .dashboard-chat-body {
 .ita-m-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ita-m-host { font-size: 11px; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ita-empty-machines { padding: 20px 16px; font-size: 13px; color: #374151; text-align: center; }
-
-.ita-download-section {
-  padding: 10px 14px 12px; border-top: 1px solid rgba(255,255,255,0.07); flex-shrink: 0;
-}
