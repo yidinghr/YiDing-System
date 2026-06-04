@@ -108,7 +108,7 @@ echo %DATE% %TIME% [OK] Python: !PYTHON_EXE! >> "%LOG%"
 :: ─── STEP 2: Tao thu muc, tai files ─────────────────────────────────────────
 echo  [2/5] Preparing install directory...
 if exist "%INSTALL_DIR%" (
-    :: Giu lai venv neu co the, chi xoa agent.py va log cu
+    REM Giu lai venv neu co the, chi xoa agent.py va log cu
     del /f /q "%INSTALL_DIR%\agent.py" >nul 2>&1
 )
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
