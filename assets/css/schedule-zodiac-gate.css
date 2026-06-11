@@ -459,6 +459,10 @@ body.zg-lock {
   .zg-breadcrumb {
     font-size: 11px;
   }
+  /* Header is already cramped on phones (pre-existing) — keep only the way back. */
+  .zg-breadcrumb span:not(.zg-breadcrumb__back) {
+    display: none;
+  }
 }
 
 /* --- Reduced motion / weak devices --- */
