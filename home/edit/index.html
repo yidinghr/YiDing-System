@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="../../assets/css/base.css">
 <link rel="stylesheet" href="../../assets/css/i18n.css">
 <link rel="stylesheet" href="../../assets/css/edit-schedule.css">
+<link rel="stylesheet" href="../../assets/css/schedule-overtime.css">
 </head>
 
 <body class="edit-page" data-login-path="../../index.html" data-home-path="../home.html">
@@ -51,6 +52,10 @@
 </div>
 </div>
 <div class="schedule-period-actions">
+<div class="schedule-mode-toggle" role="group" aria-label="Chế độ nhập">
+<button id="scheduleModeShift" type="button" class="schedule-mode-toggle__btn is-active" data-mode="shift" aria-pressed="true">Ca</button>
+<button id="scheduleModeOt" type="button" class="schedule-mode-toggle__btn" data-mode="overtime" aria-pressed="false">OT</button>
+</div>
 <label class="schedule-code-entry">
 <span id="scheduleCodeLabel" class="schedule-code-entry__label">Code</span>
 <span class="schedule-code-entry__field">

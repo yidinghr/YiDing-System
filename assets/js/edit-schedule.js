@@ -42,8 +42,13 @@
     en: ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
   };
   const SUMMARY_FIELDS = [
-    { id: "overtimeCount", labels: { "zh-Hant": "加班", vi: "Tăng ca", en: "Overtime" } },
-    { id: "nightHours", labels: { "zh-Hant": "夜班补贴(时数)", vi: "Giờ ca đêm", en: "Night Hours" } }
+    { id: "workedDays", labels: { "zh-Hant": "出勤天", vi: "Ngày công", en: "Days" } },
+    { id: "overtimeCount", labels: { "zh-Hant": "加班天", vi: "Ngày OT", en: "OT Days" } },
+    { id: "otHours", labels: { "zh-Hant": "加班时", vi: "Giờ OT", en: "OT Hrs" } },
+    { id: "otNightHours", labels: { "zh-Hant": "夜OT", vi: "OT đêm", en: "OT Night" } },
+    { id: "otHolidayHours", labels: { "zh-Hant": "节OT", vi: "OT lễ", en: "OT Hol" } },
+    { id: "nightHours", labels: { "zh-Hant": "夜班(时)", vi: "Giờ đêm", en: "Night" } },
+    { id: "totalPaidHours", labels: { "zh-Hant": "实际时数", vi: "Tổng giờ", en: "Total Hrs" } }
   ];
   const META_HEADERS = {
     "zh-Hant": ["工號", "部門", "越名字", "英名字", "职位"],
@@ -89,6 +94,82 @@
   }, {});
   const VALID_SHIFT_CODES = SHIFT_CODE_DEFINITIONS.map(function (item) { return item.code; });
   const MAJOR_SHIFT_CODES = VALID_SHIFT_CODES.slice(0, 24);
+  // Overtime (tăng ca) is a SEPARATE data branch layered on top of shift codes.
+  // It never overwrites the shift cell. Pay multipliers locked by business rules:
+  //   normal/night = x1 (paid like a regular working hour)
+  //   holiday/holidayNight = x3 (300%, paid in full, no time-off-in-lieu)
+  const OVERTIME_TYPES = Object.freeze(["normal", "night", "holiday", "holidayNight"]);
+  const OVERTIME_PAY_MULTIPLIER = Object.freeze({
+    normal: 1,
+    night: 1,
+    holiday: 3,
+    holidayNight: 3
+  });
+  // Per-code colours mirroring the real Excel workbook (A=gold, B=pink->red, C=lavender->purple,
+  // leave=white/red, off/npl=red). Single source of truth shared by the grid and Excel export.
+  const SHIFT_CODE_COLORS = Object.freeze({
+    A:  { bg: "#FFF9C4", fg: "#7A5800" },
+    A1: { bg: "#FFF176", fg: "#7A5800" },
+    A2: { bg: "#FFE34D", fg: "#6B4C00" },
+    A3: { bg: "#FFD21A", fg: "#5C4000" },
+    A4: { bg: "#FFC107", fg: "#523800" },
+    A5: { bg: "#FFA000", fg: "#4A2D00" },
+    A6: { bg: "#FF8F00", fg: "#3A2200" },
+    A7: { bg: "#EF6C00", fg: "#FFFFFF" },
+    B:  { bg: "#F9CDD3", fg: "#5C0F1A" },
+    B1: { bg: "#F2A9B4", fg: "#5C0F1A" },
+    B2: { bg: "#EB8593", fg: "#4B0C15" },
+    B3: { bg: "#E36172", fg: "#FFFFFF" },
+    B4: { bg: "#D94353", fg: "#FFFFFF" },
+    B5: { bg: "#C62F3E", fg: "#FFFFFF" },
+    B6: { bg: "#A82532", fg: "#FFFFFF" },
+    B7: { bg: "#8B1E2A", fg: "#FFFFFF" },
+    C:  { bg: "#EFE3F7", fg: "#3D1566" },
+    C1: { bg: "#DCC5EE", fg: "#3D1566" },
+    C2: { bg: "#C5A3E2", fg: "#2E0E52" },
+    C3: { bg: "#AC80D4", fg: "#FFFFFF" },
+    C4: { bg: "#9260C4", fg: "#FFFFFF" },
+    C5: { bg: "#7A45B0", fg: "#FFFFFF" },
+    C6: { bg: "#63309B", fg: "#FFFFFF" },
+    C7: { bg: "#4C1F82", fg: "#FFFFFF" },
+    NPL: { bg: "#E53935", fg: "#FFFFFF" },
+    OFF: { bg: "#E53935", fg: "#FFFFFF" },
+    SL: { bg: "#F7F2F2", fg: "#C62828" },
+    PH: { bg: "#F7F2F2", fg: "#C62828" },
+    TL: { bg: "#F7F2F2", fg: "#C62828" },
+    AL: { bg: "#F7F2F2", fg: "#C62828" },
+    BL: { bg: "#F7F2F2", fg: "#C62828" }
+  });
+
+  function getCodeCellStyle(code) {
+    const color = SHIFT_CODE_COLORS[code];
+    if (!color) {
+      return "";
+    }
+    // Inline !important is required to beat the legacy per-group !important rules
+    // in edit-schedule.css (theme blocks) without ripping them out.
+    return "background:" + color.bg + " !important;color:" + color.fg + " !important;";
+  }
+
+  function formatOtHours(hours) {
+    return String(Number(hours) || 0);
+  }
+
+  // OT badge text: hours + suffix (N night, L holiday, LN holiday-night).
+  function getOtBadgeLabel(entry) {
+    if (!entry) {
+      return "";
+    }
+    let suffix = "";
+    if (entry.type === "night") {
+      suffix = "N";
+    } else if (entry.type === "holiday") {
+      suffix = "L";
+    } else if (entry.type === "holidayNight") {
+      suffix = "LN";
+    }
+    return "OT" + formatOtHours(entry.hours) + suffix;
+  }
   const dom = {
     app: document.getElementById("scheduleApp"),
     workspace: document.querySelector(".schedule-workspace"),
@@ -147,7 +228,9 @@
     calYear: document.getElementById("scheduleCalYear"),
     calMonth: document.getElementById("scheduleCalMonth"),
     calGrid: document.getElementById("scheduleCalGrid"),
-    calSave: document.getElementById("scheduleCalSave")
+    calSave: document.getElementById("scheduleCalSave"),
+    modeShift: document.getElementById("scheduleModeShift"),
+    modeOt: document.getElementById("scheduleModeOt")
   };
 
   if (!i18n || !dom.app || !dom.yearSelect || !dom.monthSelect || !dom.tableHead || !dom.tableBody) {
@@ -176,7 +259,10 @@
     lockedScrollY: null,
     stickyMetricsObserver: null,
     calendarOpen: false,
-    calHighlightedDays: []
+    calHighlightedDays: [],
+    inputMode: "shift",
+    otPopover: null,
+    dailyOtOpen: true
   };
   const state = loadState();
   let legendRemarks = loadLegendRemarks();
@@ -238,7 +324,8 @@
       sourceType: "employee",
       employeeId: snapshot.employeeId,
       employeeSnapshot: snapshot,
-      shifts: {}
+      shifts: {},
+      overtime: {}
     };
   }
 
@@ -255,7 +342,8 @@
         engName: "",
         position: ""
       },
-      shifts: {}
+      shifts: {},
+      overtime: {}
     };
   }
 
@@ -280,6 +368,57 @@
     return result;
   }
 
+  function sanitizeOvertimeHours(value) {
+    const hours = Number(value);
+    if (!Number.isFinite(hours) || hours <= 0) {
+      return 0;
+    }
+    return Math.min(8, Math.max(0.5, Math.round(hours * 2) / 2));
+  }
+
+  function normalizeOvertime(value) {
+    const result = {};
+    if (!value || typeof value !== "object") {
+      return result;
+    }
+    Object.keys(value).forEach(function (key) {
+      if (!/^\d+$/.test(key)) {
+        return;
+      }
+      const entry = value[key];
+      if (!entry || typeof entry !== "object") {
+        return;
+      }
+      const hours = sanitizeOvertimeHours(entry.hours);
+      if (!hours) {
+        return;
+      }
+      result[String(Number(key))] = {
+        hours: hours,
+        type: OVERTIME_TYPES.indexOf(entry.type) >= 0 ? entry.type : "normal",
+        note: String(entry.note || ""),
+        approvedBy: String(entry.approvedBy || "")
+      };
+    });
+    return result;
+  }
+
+  function normalizeHolidays(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const seen = {};
+    const result = [];
+    value.forEach(function (day) {
+      const num = Number(day);
+      if (Number.isInteger(num) && num >= 1 && num <= 31 && !seen[num]) {
+        seen[num] = true;
+        result.push(num);
+      }
+    });
+    return result.sort(function (a, b) { return a - b; });
+  }
+
   function normalizeRow(row) {
     const snapshot = row && row.employeeSnapshot ? row.employeeSnapshot : {};
     return {
@@ -294,7 +433,8 @@
         engName: String(snapshot.engName || ""),
         position: String(snapshot.position || "")
       },
-      shifts: normalizeShifts(row && row.shifts)
+      shifts: normalizeShifts(row && row.shifts),
+      overtime: normalizeOvertime(row && row.overtime)
     };
   }
 
@@ -417,9 +557,18 @@
   }
 
   function ensureCurrentMonthState() {
-    const key = getCurrentMonthKey();
+    return ensureMonthStateFor(state.selectedYear, state.selectedMonth);
+  }
+
+  function getMonthKeyFor(year, month) {
+    return String(year) + "-" + String(month).padStart(2, "0");
+  }
+
+  function ensureMonthStateFor(year, month) {
+    const key = getMonthKeyFor(year, month);
     const monthState = state.months[key] && typeof state.months[key] === "object" ? state.months[key] : { rows: [] };
     monthState.rows = Array.isArray(monthState.rows) ? monthState.rows.map(normalizeRow) : [];
+    monthState.holidays = normalizeHolidays(monthState.holidays);
     state.months[key] = monthState;
     saveState();
     return monthState;
@@ -534,6 +683,7 @@
     }
     renderLegendCodeEditToggle();
     renderCornerActions();
+    renderModeToggle();
     renderCodeDropdown();
   }
 
@@ -655,8 +805,42 @@
     dom.calendarToggle.textContent = uiState.calendarOpen ? "▲" : "▼";
     dom.calendarToggle.setAttribute("aria-expanded", String(Boolean(uiState.calendarOpen)));
     if (uiState.calendarOpen) {
+      // Default the calendar to the month currently open on the sheet so marking
+      // holidays lines up with what anh đang xem.
+      if (dom.calYear) { dom.calYear.value = String(state.selectedYear); }
+      if (dom.calMonth) { dom.calMonth.value = String(state.selectedMonth); }
+      loadCalHolidaysFromState();
       buildCalendarGrid();
     }
+  }
+
+  function loadCalHolidaysFromState() {
+    if (!dom.calYear || !dom.calMonth) {
+      uiState.calHighlightedDays = [];
+      return;
+    }
+    const year = Number(dom.calYear.value);
+    const month = Number(dom.calMonth.value);
+    const key = getMonthKeyFor(year, month);
+    const raw = state.months[key];
+    uiState.calHighlightedDays = normalizeHolidays(raw && raw.holidays).slice();
+  }
+
+  function saveCalendarHolidays() {
+    if (!dom.calYear || !dom.calMonth) { return; }
+    const year = sanitizeYear(dom.calYear.value);
+    const month = sanitizeMonth(dom.calMonth.value);
+    const monthState = ensureMonthStateFor(year, month);
+    monthState.holidays = normalizeHolidays(uiState.calHighlightedDays);
+    saveState();
+    // If the saved month is the one on screen, refresh holiday markers + OT type hints.
+    if (year === state.selectedYear && month === state.selectedMonth) {
+      renderAll();
+    }
+    const count = monthState.holidays.length;
+    showFeedback(i18n.getLocale() === "vi"
+      ? "Đã lưu " + count + " ngày lễ cho tháng " + month + "/" + year + "."
+      : (i18n.getLocale() === "zh-Hant" ? "已儲存 " + count + " 個假日。" : "Saved " + count + " holiday(s)."), "success");
   }
 
   function buildCalendarGrid() {
@@ -681,34 +865,6 @@
     }
     html += '</div>';
     dom.calGrid.innerHTML = html;
-  }
-
-  function applyCalendarHighlights() {
-    const days = uiState.calHighlightedDays;
-    const cls = "is-cal-day-highlighted";
-    [dom.tableHead, dom.frozenTableHead].forEach(function (head) {
-      if (!head) { return; }
-      head.querySelectorAll("[data-day-head]").forEach(function (th) {
-        th.classList.remove(cls);
-      });
-    });
-    if (dom.tableBody) {
-      dom.tableBody.querySelectorAll("td.schedule-table__cell").forEach(function (td) {
-        td.classList.remove(cls);
-      });
-    }
-    days.forEach(function (day) {
-      [dom.tableHead, dom.frozenTableHead].forEach(function (head) {
-        if (!head) { return; }
-        const th = head.querySelector('[data-day-head="' + day + '"]');
-        if (th) { th.classList.add(cls); }
-      });
-      if (dom.tableBody) {
-        dom.tableBody.querySelectorAll('[data-day="' + day + '"]').forEach(function (btn) {
-          if (btn.parentElement) { btn.parentElement.classList.add(cls); }
-        });
-      }
-    });
   }
 
   function initCalendar() {
@@ -819,12 +975,12 @@
     renderSelectionState();
     renderSelectionMeta();
     renderLegendListState();
-    applyCalendarHighlights();
   }
 
   function renderTableHead() {
     const labels = META_HEADERS[i18n.getLocale()] || META_HEADERS["zh-Hant"];
     const days = getDaysInMonth(state.selectedYear, state.selectedMonth);
+    const holidaySet = getMonthHolidaySet(getMonthState());
     let dayRow = "<tr>";
     dayRow += '<th class="schedule-table__meta-head schedule-table__meta--id schedule-table__sticky schedule-table__sticky--id">' + escapeHtml(labels[0]) + renderColumnResizer("id") + "</th>";
     dayRow += '<th class="schedule-table__meta-head schedule-table__meta--department schedule-table__sticky schedule-table__sticky--department">' + escapeHtml(labels[1]) + renderColumnResizer("dept") + "</th>";
@@ -839,8 +995,9 @@
     weekdayRow += '<th class="schedule-table__meta-subhead schedule-table__meta--eng schedule-table__sticky schedule-table__sticky--eng"></th>';
     weekdayRow += '<th class="schedule-table__meta-subhead schedule-table__meta--position schedule-table__sticky schedule-table__sticky--position"></th>';
     for (let day = 1; day <= days; day += 1) {
-      dayRow += '<th class="schedule-table__day-head" data-day-head="' + day + '">' + day + renderColumnResizer("day") + "</th>";
-      weekdayRow += '<th class="schedule-table__weekday-head">' + escapeHtml(getWeekdayLabel(state.selectedYear, state.selectedMonth, day)) + "</th>";
+      const holidayClass = holidaySet[day] ? " is-holiday-day" : "";
+      dayRow += '<th class="schedule-table__day-head' + holidayClass + '" data-day-head="' + day + '">' + day + renderColumnResizer("day") + "</th>";
+      weekdayRow += '<th class="schedule-table__weekday-head' + holidayClass + '">' + escapeHtml(getWeekdayLabel(state.selectedYear, state.selectedMonth, day)) + "</th>";
     }
     const headMarkup = dayRow + "</tr>" + weekdayRow + "</tr>";
     dom.tableHead.innerHTML = headMarkup;
@@ -851,6 +1008,7 @@
 
   function renderTableBody(monthState) {
     const days = getDaysInMonth(state.selectedYear, state.selectedMonth);
+    const holidaySet = getMonthHolidaySet(monthState);
     const bodyRows = monthState.rows.map(function (row, rowIndex) {
       const snapshot = row.employeeSnapshot;
       let html = '<tr class="schedule-table__body-row" data-row-id="' + escapeHtml(row.id) + '" data-row-index="' + rowIndex + '">';
@@ -861,7 +1019,14 @@
       html += '<td class="schedule-table__meta schedule-table__sticky schedule-table__sticky--position"><div class="schedule-meta-wrap"><button type="button" class="schedule-meta-cell" data-grid-cell="true" data-row-index="' + rowIndex + '" data-col-index="4">' + escapeHtml(snapshot.position) + '</button></div></td>';
       for (let day = 1; day <= days; day += 1) {
         const code = normalizeCellValue(row.shifts[String(day)]);
-        html += '<td class="schedule-table__cell"><button type="button" class="schedule-cell" data-grid-cell="true" data-schedule-cell="true" data-row-index="' + rowIndex + '" data-col-index="' + (META_COLUMNS.length + day - 1) + '" data-day="' + day + '" data-code-group="' + escapeHtml(getCodeGroup(code)) + '">' + renderCellValue(code) + '</button></td>';
+        const otEntry = getOvertimeEntry(row, day);
+        const codeStyle = getCodeCellStyle(code);
+        const styleAttr = codeStyle ? ' style="' + codeStyle + '"' : "";
+        const holidayClass = holidaySet[day] ? " is-holiday-cell" : "";
+        const otBadge = otEntry
+          ? '<span class="schedule-cell__ot-badge" data-ot-type="' + escapeHtml(otEntry.type) + '">' + escapeHtml(getOtBadgeLabel(otEntry)) + '</span>'
+          : "";
+        html += '<td class="schedule-table__cell"><button type="button" class="schedule-cell' + holidayClass + '" data-grid-cell="true" data-schedule-cell="true" data-row-index="' + rowIndex + '" data-col-index="' + (META_COLUMNS.length + day - 1) + '" data-day="' + day + '" data-code="' + escapeHtml(code) + '" data-code-group="' + escapeHtml(getCodeGroup(code)) + '"' + styleAttr + '>' + renderCellValue(code) + otBadge + '</button></td>';
       }
       return html + '</tr>';
     }).join("");
@@ -889,7 +1054,10 @@
       return [
         '<tr data-summary-row-index="' + rowIndex + '">',
         SUMMARY_FIELDS.map(function (field) {
-          return '<td data-summary-row-index="' + rowIndex + '" data-summary-field="' + field.id + '">' + escapeHtml(summary[field.id]) + "</td>";
+          const value = summary[field.id];
+          const display = Number(value) ? formatOtHours(value) : "";
+          const otClass = field.id.indexOf("ot") === 0 ? " schedule-summary-table__ot-cell" : "";
+          return '<td class="' + otClass.trim() + '" data-summary-row-index="' + rowIndex + '" data-summary-field="' + field.id + '">' + escapeHtml(display) + "</td>";
         }).join(""),
         "</tr>"
       ].join("");
@@ -938,20 +1106,53 @@
       }).join("") + "</tr>";
     }
 
-    dom.dailyBody.innerHTML = activeCodes.map(function (code) {
-      let row = '<tr data-daily-code-row="' + escapeHtml(code) + '">';
-      row += '<td class="schedule-daily-table__blank schedule-daily-table__spacer--id schedule-daily-table__sticky schedule-daily-table__sticky--id"></td>';
-      row += '<td class="schedule-daily-table__blank schedule-daily-table__spacer--department schedule-daily-table__sticky schedule-daily-table__sticky--department"></td>';
-      row += '<td class="schedule-daily-table__blank schedule-daily-table__spacer--vie schedule-daily-table__sticky schedule-daily-table__sticky--vie"></td>';
-      row += '<td class="schedule-daily-table__blank schedule-daily-table__spacer--eng schedule-daily-table__sticky schedule-daily-table__sticky--eng"></td>';
-      row += '<td class="schedule-daily-table__spacer--position schedule-daily-table__sticky schedule-daily-table__sticky--position">' + escapeHtml(getLegendCodeLabel(code)) + "</td>";
+    function dailyMetaPrefix(positionMarkup, trAttrs) {
+      let prefix = "<tr" + (trAttrs ? " " + trAttrs : "") + ">";
+      prefix += '<td class="schedule-daily-table__blank schedule-daily-table__spacer--id schedule-daily-table__sticky schedule-daily-table__sticky--id"></td>';
+      prefix += '<td class="schedule-daily-table__blank schedule-daily-table__spacer--department schedule-daily-table__sticky schedule-daily-table__sticky--department"></td>';
+      prefix += '<td class="schedule-daily-table__blank schedule-daily-table__spacer--vie schedule-daily-table__sticky schedule-daily-table__sticky--vie"></td>';
+      prefix += '<td class="schedule-daily-table__blank schedule-daily-table__spacer--eng schedule-daily-table__sticky schedule-daily-table__sticky--eng"></td>';
+      prefix += '<td class="schedule-daily-table__spacer--position schedule-daily-table__sticky schedule-daily-table__sticky--position">' + positionMarkup + "</td>";
+      return prefix;
+    }
+
+    const bodyRowsHtml = [];
+
+    activeCodes.forEach(function (code) {
+      let row = dailyMetaPrefix(escapeHtml(getLegendCodeLabel(code)), 'data-daily-code-row="' + escapeHtml(code) + '"');
       for (let day = 1; day <= days; day += 1) {
         row += '<td data-daily-code="' + escapeHtml(code) + '" data-daily-day="' + day + '">' + getDailyCount(monthState.rows, code, day) + "</td>";
       }
-      return row + "</tr>";
-    }).join("");
+      bodyRowsHtml.push(row + "</tr>");
+    });
+
+    // --- OT daily rows (collapsible) ---
+    const otToggleLabel = "Σ OT " + '<span class="schedule-daily-ot-caret">' + (uiState.dailyOtOpen ? "▾" : "▸") + "</span>";
+    let otHeaderRow = dailyMetaPrefix('<button type="button" class="schedule-daily-ot-toggle" data-daily-ot-toggle="true">' + otToggleLabel + "</button>", 'class="schedule-daily-ot-row schedule-daily-ot-row--header"');
+    for (let day = 1; day <= days; day += 1) {
+      const dh = getDailyOtHours(monthState.rows, day);
+      otHeaderRow += '<td data-daily-ot-day="' + day + '">' + (dh ? formatOtHours(dh) : "") + "</td>";
+    }
+    bodyRowsHtml.push(otHeaderRow + "</tr>");
+
+    const otDetailRows = [];
+    if (uiState.dailyOtOpen) {
+      let peopleRow = dailyMetaPrefix(escapeHtml(otLabel("OT người", "OT people", "OT人數")), 'class="schedule-daily-ot-row"');
+      let nightRow = dailyMetaPrefix(escapeHtml(otLabel("OT đêm", "OT night", "夜OT")), 'class="schedule-daily-ot-row"');
+      let holidayRow = dailyMetaPrefix(escapeHtml(otLabel("OT lễ", "OT holiday", "節OT")), 'class="schedule-daily-ot-row"');
+      for (let day = 1; day <= days; day += 1) {
+        const tallies = getDailyOtTallies(monthState.rows, day);
+        peopleRow += '<td>' + (tallies.people ? tallies.people : "") + "</td>";
+        nightRow += '<td>' + (tallies.night ? formatOtHours(tallies.night) : "") + "</td>";
+        holidayRow += '<td>' + (tallies.holiday ? formatOtHours(tallies.holiday) : "") + "</td>";
+      }
+      otDetailRows.push(peopleRow + "</tr>", nightRow + "</tr>", holidayRow + "</tr>");
+    }
+    otDetailRows.forEach(function (r) { bodyRowsHtml.push(r); });
+
+    dom.dailyBody.innerHTML = bodyRowsHtml.join("");
     if (dom.dailySpacerBody) {
-      dom.dailySpacerBody.innerHTML = activeCodes.map(function () {
+      dom.dailySpacerBody.innerHTML = bodyRowsHtml.map(function () {
         return "<tr>" + SUMMARY_FIELDS.map(function () {
           return '<td class="schedule-daily-spacer-table__blank"></td>';
         }).join("") + "</tr>";
@@ -966,25 +1167,105 @@
     }, 0);
   }
 
+  function getDailyOtHours(rows, day) {
+    const dayKey = String(day);
+    let total = 0;
+    rows.forEach(function (row) {
+      const entry = row.overtime && row.overtime[dayKey];
+      if (entry && Number(entry.hours)) {
+        total += Number(entry.hours);
+      }
+    });
+    return Math.round(total * 2) / 2;
+  }
+
+  function getDailyOtTallies(rows, day) {
+    const dayKey = String(day);
+    const tallies = { people: 0, night: 0, holiday: 0 };
+    rows.forEach(function (row) {
+      const entry = row.overtime && row.overtime[dayKey];
+      const hours = entry && Number(entry.hours) ? Number(entry.hours) : 0;
+      if (!hours) {
+        return;
+      }
+      tallies.people += 1;
+      if (entry.type === "night" || entry.type === "holidayNight") {
+        tallies.night += hours;
+      }
+      if (entry.type === "holiday" || entry.type === "holidayNight") {
+        tallies.holiday += hours;
+      }
+    });
+    tallies.night = Math.round(tallies.night * 2) / 2;
+    tallies.holiday = Math.round(tallies.holiday * 2) / 2;
+    return tallies;
+  }
+
   function getRowSummary(row) {
     const dayCount = getDaysInMonth(state.selectedYear, state.selectedMonth);
-    return Object.keys(row.shifts).reduce(function (summary, day) {
-      const code = normalizeCellValue(row.shifts[day]);
-      const definition = SHIFT_CODE_MAP[code];
-      if (code === "加") {
-        summary.overtimeCount += 1;
+    const summary = {
+      workedDays: 0,
+      overtimeCount: 0,
+      requiredHours: Math.max(0, (dayCount - 4) * 8),
+      actualHours: 0,
+      nightHours: 0,
+      otHours: 0,
+      otNightHours: 0,
+      otHolidayHours: 0,
+      otPaidHours: 0,
+      totalPaidHours: 0
+    };
+    const shifts = row && row.shifts ? row.shifts : {};
+    Object.keys(shifts).forEach(function (day) {
+      const code = normalizeCellValue(shifts[day]);
+      if (!code) {
+        return;
       }
+      summary.workedDays += 1;
+      const definition = SHIFT_CODE_MAP[code];
       if (definition) {
         summary.actualHours += Number(definition.hoursPay || 0);
         summary.nightHours += Number(definition.nightHours || 0);
       }
-      return summary;
-    }, {
-      overtimeCount: 0,
-      requiredHours: Math.max(0, (dayCount - 4) * 8),
-      actualHours: 0,
-      nightHours: 0
     });
+    const overtime = row && row.overtime ? row.overtime : {};
+    Object.keys(overtime).forEach(function (day) {
+      const entry = overtime[day];
+      const hours = entry && Number(entry.hours) ? Number(entry.hours) : 0;
+      if (!hours) {
+        return;
+      }
+      summary.overtimeCount += 1;
+      summary.otHours += hours;
+      if (entry.type === "night" || entry.type === "holidayNight") {
+        summary.otNightHours += hours;
+      }
+      if (entry.type === "holiday" || entry.type === "holidayNight") {
+        summary.otHolidayHours += hours;
+      }
+      summary.otPaidHours += hours * (OVERTIME_PAY_MULTIPLIER[entry.type] || 1);
+    });
+    summary.otHours = Math.round(summary.otHours * 2) / 2;
+    summary.otNightHours = Math.round(summary.otNightHours * 2) / 2;
+    summary.otHolidayHours = Math.round(summary.otHolidayHours * 2) / 2;
+    summary.otPaidHours = Math.round(summary.otPaidHours * 2) / 2;
+    summary.totalPaidHours = Math.round((summary.actualHours + summary.otPaidHours) * 2) / 2;
+    return summary;
+  }
+
+  function getOvertimeEntry(row, day) {
+    if (!row || !row.overtime) {
+      return null;
+    }
+    const entry = row.overtime[String(day)];
+    return entry && Number(entry.hours) > 0 ? entry : null;
+  }
+
+  function getMonthHolidaySet(monthState) {
+    const set = {};
+    const holidays = monthState && Array.isArray(monthState.holidays) ? monthState.holidays : [];
+    holidays.forEach(function (day) { set[Number(day)] = true; });
+    return set;
   }
 
   function bindEvents() {
@@ -1008,6 +1289,12 @@
     }
     if (dom.exportButton) {
       dom.exportButton.addEventListener("click", exportCurrentMonthExcel);
+    }
+    if (dom.modeShift) {
+      dom.modeShift.addEventListener("click", function () { setInputMode("shift"); });
+    }
+    if (dom.modeOt) {
+      dom.modeOt.addEventListener("click", function () { setInputMode("overtime"); });
     }
     if (dom.addRowsCount) {
       dom.addRowsCount.addEventListener("keydown", function (event) {
@@ -1047,11 +1334,13 @@
     }
     if (dom.calYear) {
       dom.calYear.addEventListener("change", function () {
+        loadCalHolidaysFromState();
         buildCalendarGrid();
       });
     }
     if (dom.calMonth) {
       dom.calMonth.addEventListener("change", function () {
+        loadCalHolidaysFromState();
         buildCalendarGrid();
       });
     }
@@ -1071,10 +1360,7 @@
       });
     }
     if (dom.calSave) {
-      dom.calSave.addEventListener("click", function () {
-        applyCalendarHighlights();
-        showFeedback(i18n.getLocale() === "vi" ? "Đã lưu bảng lịch." : "Calendar saved.", "success");
-      });
+      dom.calSave.addEventListener("click", saveCalendarHolidays);
     }
     if (dom.legendBody) {
       dom.legendBody.addEventListener("change", function (event) {
@@ -1156,6 +1442,9 @@
       }
       if (uiState.codeDropdownOpen && dom.codeDropdown && !dom.codeDropdown.contains(event.target) && event.target !== dom.selectionInput) {
         hideCodeDropdown();
+      }
+      if (otDraft && otPopoverEl && !otPopoverEl.contains(event.target) && !event.target.closest("[data-schedule-cell]")) {
+        closeOvertimePopover();
       }
       if (state.legendOpen && dom.legendPanel && !dom.legendPanel.contains(event.target) && !dom.legendToggle.contains(event.target)) {
         state.legendOpen = false;
@@ -1240,6 +1529,17 @@
     });
     dom.tableBody.addEventListener("mousedown", handleCellPointerStart);
     dom.tableBody.addEventListener("mouseover", handleCellPointerMove);
+    dom.tableBody.addEventListener("dblclick", handleCellDoubleClick);
+    if (dom.dailyBody) {
+      dom.dailyBody.addEventListener("click", function (event) {
+        if (event.target.closest("[data-daily-ot-toggle]")) {
+          uiState.dailyOtOpen = !uiState.dailyOtOpen;
+          renderDailySummary(ensureCurrentMonthState());
+          syncSummarySpacerWidth();
+          requestFrozenHeaderSync();
+        }
+      });
+    }
     dom.tableHead.addEventListener("mousedown", handleResizePointerStart);
     dom.tableHead.addEventListener("dblclick", handleResizeAutoFit);
     if (dom.frozenTableHead) {
@@ -1310,6 +1610,7 @@
   }
 
   function handlePeriodChange(year, month) {
+    closeOvertimePopover();
     const previousKey = getCurrentMonthKey();
     state.selectedYear = year;
     state.selectedMonth = month;
@@ -2289,7 +2590,380 @@
       showFeedback(getLockedFeedback(), "error");
       return;
     }
+    if (uiState.inputMode === "overtime") {
+      applyOvertimeToSelection(dom.selectionInput.value);
+      return;
+    }
     applyCodeToSelection(normalizeCellValue(dom.selectionInput.value));
+  }
+
+  function setInputMode(mode) {
+    const nextMode = mode === "overtime" ? "overtime" : "shift";
+    uiState.inputMode = nextMode;
+    if (uiState.codeDropdownOpen) {
+      hideCodeDropdown();
+    }
+    renderModeToggle();
+    focusSelectionInput();
+  }
+
+  function renderModeToggle() {
+    const isOt = uiState.inputMode === "overtime";
+    if (dom.app) {
+      dom.app.classList.toggle("schedule-app--ot-mode", isOt);
+    }
+    if (dom.modeShift) {
+      dom.modeShift.classList.toggle("is-active", !isOt);
+      dom.modeShift.setAttribute("aria-pressed", String(!isOt));
+    }
+    if (dom.modeOt) {
+      dom.modeOt.classList.toggle("is-active", isOt);
+      dom.modeOt.setAttribute("aria-pressed", String(isOt));
+    }
+    if (dom.selectionInput) {
+      const otLabel = i18n.getLocale() === "zh-Hant" ? "加班時數" : (i18n.getLocale() === "vi" ? "Giờ OT" : "OT hours");
+      const codeLabel = i18n.getLocale() === "zh-Hant" ? "班碼" : (i18n.getLocale() === "vi" ? "Mã ca" : "Code");
+      dom.selectionInput.setAttribute("placeholder", isOt ? otLabel : codeLabel);
+      dom.selectionInput.setAttribute("inputmode", isOt ? "decimal" : "text");
+    }
+  }
+
+  // Suggest an OT type from the day's holiday flag + the shift code's night profile.
+  function suggestOvertimeType(row, day, holidaySet) {
+    const isHoliday = Boolean(holidaySet[Number(day)]);
+    const code = normalizeCellValue(row.shifts[String(day)]);
+    const definition = SHIFT_CODE_MAP[code];
+    const isNightShift = Boolean(definition && Number(definition.nightHours) > 0);
+    if (isHoliday && isNightShift) {
+      return "holidayNight";
+    }
+    if (isHoliday) {
+      return "holiday";
+    }
+    return "normal";
+  }
+
+  function applyOvertimeToSelection(rawValue) {
+    if (uiState.scheduleLocked) {
+      showFeedback(getLockedFeedback(), "error");
+      return;
+    }
+    if (!uiState.selection) {
+      showFeedback(i18n.t("schedule.feedback.selectCell"), "error");
+      return;
+    }
+    const schedulePoints = getSelectedSchedulePoints();
+    if (!schedulePoints.length) {
+      showFeedback(i18n.getLocale() === "vi" ? "Hãy chọn ô ca làm để ghi tăng ca." : "Select schedule cells to record overtime.", "error");
+      return;
+    }
+    const trimmed = String(rawValue || "").trim();
+    const clearing = trimmed === "" || Number(trimmed) === 0;
+    const hours = clearing ? 0 : sanitizeOvertimeHours(trimmed);
+    if (!clearing && !hours) {
+      showFeedback(i18n.getLocale() === "vi" ? "Số giờ OT không hợp lệ (0.5 – 8)." : "Invalid OT hours (0.5 – 8).", "error");
+      return;
+    }
+    const monthState = ensureCurrentMonthState();
+    const holidaySet = getMonthHolidaySet(monthState);
+    const changes = [];
+    schedulePoints.forEach(function (point) {
+      const row = monthState.rows[point.rowIndex];
+      if (!row) {
+        return;
+      }
+      if (!row.overtime) {
+        row.overtime = {};
+      }
+      const dayKey = String(getColumnInfo(point.colIndex).day);
+      const previous = row.overtime[dayKey] ? Object.assign({}, row.overtime[dayKey]) : null;
+      if (clearing) {
+        if (!previous) {
+          return;
+        }
+        delete row.overtime[dayKey];
+        changes.push({ rowId: row.id, kind: "overtime", day: dayKey, previous: previous });
+        return;
+      }
+      const nextEntry = {
+        hours: hours,
+        type: previous && previous.type ? previous.type : suggestOvertimeType(row, dayKey, holidaySet),
+        note: previous ? previous.note : "",
+        approvedBy: previous ? previous.approvedBy : ""
+      };
+      row.overtime[dayKey] = nextEntry;
+      changes.push({ rowId: row.id, kind: "overtime", day: dayKey, previous: previous });
+    });
+    if (!changes.length) {
+      showFeedback(i18n.t("schedule.feedback.noChanges"), "error");
+      return;
+    }
+    uiState.history.push({ monthKey: getCurrentMonthKey(), changes: changes });
+    if (uiState.history.length > 120) {
+      uiState.history.shift();
+    }
+    saveState();
+    dom.selectionInput.value = "";
+    renderAll();
+    focusSelectionInput();
+    showFeedback(clearing
+      ? (i18n.getLocale() === "vi" ? "Đã xóa tăng ca." : "Overtime cleared.")
+      : (i18n.getLocale() === "vi" ? "Đã ghi OT " + hours + "h." : "Overtime " + hours + "h applied."), "success");
+  }
+
+  // ----- Overtime detail popover (double-click a schedule cell) -----
+  let otPopoverEl = null;
+  let otDraft = null;
+
+  function otLabel(vi, en, zh) {
+    const locale = i18n.getLocale();
+    if (locale === "vi") { return vi; }
+    if (locale === "zh-Hant") { return zh || en; }
+    return en;
+  }
+
+  function getOvertimeTypeLabel(type) {
+    if (type === "night") { return otLabel("Đêm", "Night", "夜班"); }
+    if (type === "holiday") { return otLabel("Lễ", "Holiday", "假日"); }
+    if (type === "holidayNight") { return otLabel("Lễ+Đêm", "Holiday+Night", "假日夜班"); }
+    return otLabel("Thường", "Normal", "一般");
+  }
+
+  function handleCellDoubleClick(event) {
+    const cell = event.target.closest("[data-schedule-cell]");
+    if (!cell) {
+      return;
+    }
+    if (uiState.scheduleLocked) {
+      showFeedback(getLockedFeedback(), "error");
+      return;
+    }
+    const point = getCellPoint(cell);
+    const column = getColumnInfo(point.colIndex);
+    if (column.type !== "schedule") {
+      return;
+    }
+    openOvertimePopover(point.rowIndex, column.day, cell);
+  }
+
+  function ensureOtPopoverEl() {
+    if (otPopoverEl) {
+      return otPopoverEl;
+    }
+    const el = document.createElement("div");
+    el.className = "schedule-ot-popover";
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-label", "Overtime");
+    el.hidden = true;
+    el.addEventListener("mousedown", function (event) { event.stopPropagation(); });
+    el.addEventListener("click", handleOtPopoverClick);
+    el.addEventListener("input", handleOtPopoverInput);
+    el.addEventListener("keydown", function (event) {
+      event.stopPropagation();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeOvertimePopover();
+      }
+    });
+    document.body.appendChild(el);
+    otPopoverEl = el;
+    return el;
+  }
+
+  function openOvertimePopover(rowIndex, day, anchorEl) {
+    const monthState = ensureCurrentMonthState();
+    const row = monthState.rows[rowIndex];
+    if (!row) {
+      return;
+    }
+    const dayKey = String(day);
+    const existing = row.overtime && row.overtime[dayKey] ? row.overtime[dayKey] : null;
+    const holidaySet = getMonthHolidaySet(monthState);
+    otDraft = {
+      rowId: row.id,
+      day: dayKey,
+      hours: existing ? existing.hours : 2,
+      type: existing ? existing.type : suggestOvertimeType(row, dayKey, holidaySet),
+      note: existing ? existing.note : "",
+      approvedBy: existing ? existing.approvedBy : "",
+      hadEntry: Boolean(existing),
+      employeeName: row.employeeSnapshot.vieName || row.employeeSnapshot.engName || row.employeeSnapshot.ydiId || "—",
+      shiftCode: normalizeCellValue(row.shifts[dayKey]),
+      isHoliday: Boolean(holidaySet[Number(day)])
+    };
+    uiState.otPopover = { rowId: row.id, day: dayKey };
+    renderOtPopover();
+    positionOtPopover(anchorEl);
+  }
+
+  function renderOtPopover() {
+    if (!otDraft) {
+      return;
+    }
+    const el = ensureOtPopoverEl();
+    const holidayTag = otDraft.isHoliday
+      ? '<span class="schedule-ot-popover__tag">' + escapeHtml(otLabel("Ngày lễ", "Holiday", "假日")) + '</span>'
+      : "";
+    const shiftTag = otDraft.shiftCode
+      ? '<span class="schedule-ot-popover__shift">' + escapeHtml(getLegendCodeLabel(otDraft.shiftCode)) + '</span>'
+      : '<span class="schedule-ot-popover__shift schedule-ot-popover__shift--empty">' + escapeHtml(otLabel("Chưa có ca", "No shift", "無班")) + '</span>';
+    const typeButtons = OVERTIME_TYPES.map(function (type) {
+      const activeClass = type === otDraft.type ? " is-active" : "";
+      return '<button type="button" class="schedule-ot-popover__type' + activeClass + '" data-ot-set-type="' + type + '">' + escapeHtml(getOvertimeTypeLabel(type)) + '</button>';
+    }).join("");
+    el.innerHTML = [
+      '<div class="schedule-ot-popover__head">',
+      '<span class="schedule-ot-popover__title">OT · ' + escapeHtml(otDraft.employeeName) + ' · ' + otLabel("ngày", "day", "日") + ' ' + escapeHtml(otDraft.day) + '</span>',
+      shiftTag, holidayTag,
+      '</div>',
+      '<div class="schedule-ot-popover__row">',
+      '<span class="schedule-ot-popover__label">' + escapeHtml(otLabel("Số giờ", "Hours", "時數")) + '</span>',
+      '<div class="schedule-ot-popover__stepper">',
+      '<button type="button" data-ot-step="-0.5" aria-label="-0.5">−</button>',
+      '<span class="schedule-ot-popover__hours">' + escapeHtml(formatOtHours(otDraft.hours)) + '</span>',
+      '<button type="button" data-ot-step="0.5" aria-label="+0.5">+</button>',
+      '<span class="schedule-ot-popover__hint">' + escapeHtml(otLabel("0.5 – 8", "0.5 – 8", "0.5 – 8")) + '</span>',
+      '</div>',
+      '</div>',
+      '<div class="schedule-ot-popover__row">',
+      '<span class="schedule-ot-popover__label">' + escapeHtml(otLabel("Loại", "Type", "類型")) + '</span>',
+      '<div class="schedule-ot-popover__types">' + typeButtons + '</div>',
+      '</div>',
+      '<div class="schedule-ot-popover__row">',
+      '<span class="schedule-ot-popover__label">' + escapeHtml(otLabel("Ghi chú", "Note", "備註")) + '</span>',
+      '<input type="text" class="schedule-ot-popover__input" data-ot-field="note" value="' + escapeHtml(otDraft.note) + '" autocomplete="off">',
+      '</div>',
+      '<div class="schedule-ot-popover__row">',
+      '<span class="schedule-ot-popover__label">' + escapeHtml(otLabel("Người duyệt", "Approved by", "核准")) + '</span>',
+      '<input type="text" class="schedule-ot-popover__input" data-ot-field="approvedBy" value="' + escapeHtml(otDraft.approvedBy) + '" autocomplete="off">',
+      '</div>',
+      '<div class="schedule-ot-popover__foot">',
+      '<button type="button" class="schedule-ot-popover__btn schedule-ot-popover__btn--clear" data-ot-action="clear">' + escapeHtml(otLabel("Xóa OT", "Clear", "清除")) + '</button>',
+      '<button type="button" class="schedule-ot-popover__btn schedule-ot-popover__btn--save" data-ot-action="save">' + escapeHtml(otLabel("Lưu", "Save", "儲存")) + '</button>',
+      '</div>'
+    ].join("");
+    el.hidden = false;
+  }
+
+  function positionOtPopover(anchorEl) {
+    const el = ensureOtPopoverEl();
+    el.hidden = false;
+    const rect = anchorEl ? anchorEl.getBoundingClientRect() : { left: 120, bottom: 120, top: 120, right: 160 };
+    const width = el.offsetWidth || 260;
+    const height = el.offsetHeight || 220;
+    let left = rect.left;
+    let top = rect.bottom + 6;
+    if (left + width > window.innerWidth - 12) {
+      left = Math.max(12, window.innerWidth - width - 12);
+    }
+    if (top + height > window.innerHeight - 12) {
+      top = Math.max(12, rect.top - height - 6);
+    }
+    el.style.left = Math.round(left) + "px";
+    el.style.top = Math.round(top) + "px";
+  }
+
+  function handleOtPopoverInput(event) {
+    if (!otDraft) {
+      return;
+    }
+    const field = event.target.closest("[data-ot-field]");
+    if (!field) {
+      return;
+    }
+    const key = field.getAttribute("data-ot-field");
+    if (key === "note") {
+      otDraft.note = field.value;
+    } else if (key === "approvedBy") {
+      otDraft.approvedBy = field.value;
+    }
+  }
+
+  function handleOtPopoverClick(event) {
+    // Stop the click from reaching the document-level "close on outside click"
+    // handler — re-rendering the popover detaches event.target and would otherwise
+    // be misread as an outside click.
+    event.stopPropagation();
+    if (!otDraft) {
+      return;
+    }
+    const stepBtn = event.target.closest("[data-ot-step]");
+    if (stepBtn) {
+      const delta = Number(stepBtn.getAttribute("data-ot-step"));
+      otDraft.hours = sanitizeOvertimeHours(otDraft.hours + delta) || 0.5;
+      renderOtPopover();
+      return;
+    }
+    const typeBtn = event.target.closest("[data-ot-set-type]");
+    if (typeBtn) {
+      otDraft.type = typeBtn.getAttribute("data-ot-set-type");
+      renderOtPopover();
+      return;
+    }
+    const actionBtn = event.target.closest("[data-ot-action]");
+    if (actionBtn) {
+      const action = actionBtn.getAttribute("data-ot-action");
+      if (action === "save") {
+        commitOvertimePopover();
+      } else if (action === "clear") {
+        commitOvertimePopover(true);
+      }
+    }
+  }
+
+  function commitOvertimePopover(clearing) {
+    if (!otDraft || uiState.scheduleLocked) {
+      closeOvertimePopover();
+      return;
+    }
+    const monthState = ensureCurrentMonthState();
+    const row = monthState.rows.find(function (item) { return item.id === otDraft.rowId; });
+    if (!row) {
+      closeOvertimePopover();
+      return;
+    }
+    if (!row.overtime) {
+      row.overtime = {};
+    }
+    const dayKey = otDraft.day;
+    const previous = row.overtime[dayKey] ? Object.assign({}, row.overtime[dayKey]) : null;
+    if (clearing) {
+      if (previous) {
+        delete row.overtime[dayKey];
+        uiState.history.push({ monthKey: getCurrentMonthKey(), changes: [{ rowId: row.id, kind: "overtime", day: dayKey, previous: previous }] });
+      }
+    } else {
+      const hours = sanitizeOvertimeHours(otDraft.hours);
+      if (!hours) {
+        showFeedback(i18n.getLocale() === "vi" ? "Số giờ OT không hợp lệ (0.5 – 8)." : "Invalid OT hours (0.5 – 8).", "error");
+        return;
+      }
+      row.overtime[dayKey] = {
+        hours: hours,
+        type: OVERTIME_TYPES.indexOf(otDraft.type) >= 0 ? otDraft.type : "normal",
+        note: String(otDraft.note || ""),
+        approvedBy: String(otDraft.approvedBy || "")
+      };
+      uiState.history.push({ monthKey: getCurrentMonthKey(), changes: [{ rowId: row.id, kind: "overtime", day: dayKey, previous: previous }] });
+    }
+    if (uiState.history.length > 120) {
+      uiState.history.shift();
+    }
+    saveState();
+    closeOvertimePopover();
+    renderAll();
+    showFeedback(clearing
+      ? (i18n.getLocale() === "vi" ? "Đã xóa tăng ca." : "Overtime cleared.")
+      : (i18n.getLocale() === "vi" ? "Đã lưu tăng ca." : "Overtime saved."), "success");
+  }
+
+  function closeOvertimePopover() {
+    otDraft = null;
+    uiState.otPopover = null;
+    if (otPopoverEl) {
+      otPopoverEl.hidden = true;
+      otPopoverEl.innerHTML = "";
+    }
   }
 
   function clearSelectedCells() {
@@ -2550,6 +3224,17 @@
       }
       if (change.kind === "meta") {
         row.employeeSnapshot[change.metaKey] = String(change.previous || "");
+        return;
+      }
+      if (change.kind === "overtime") {
+        if (!row.overtime) {
+          row.overtime = {};
+        }
+        if (change.previous) {
+          row.overtime[change.day] = change.previous;
+        } else {
+          delete row.overtime[change.day];
+        }
         return;
       }
       if (change.previous) {
@@ -2883,7 +3568,7 @@
       return;
     }
     const items = getFilteredShiftCodes();
-    const shouldShow = uiState.codeDropdownOpen && items.length > 0;
+    const shouldShow = uiState.codeDropdownOpen && uiState.inputMode !== "overtime" && items.length > 0;
     dom.codeDropdown.hidden = !shouldShow;
     if (!shouldShow) {
       dom.codeDropdown.innerHTML = "";
@@ -3155,4 +3840,133 @@
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&apos;");
   }
+
+  // --- Public bridge for the Zodiac Galaxy Gate (and other external modules) ---
+  // Keeps the grid logic inside this IIFE; exposes only safe, read-mostly hooks.
+  const monthOpenSubscribers = [];
+
+  function ensureYearOption(year) {
+    if (!dom.yearSelect || year < 2020 || year > 2100) {
+      return;
+    }
+    const exists = Array.prototype.some.call(dom.yearSelect.options, function (option) {
+      return Number(option.value) === year;
+    });
+    if (exists) {
+      return;
+    }
+    const option = document.createElement("option");
+    option.value = String(year);
+    option.textContent = String(year);
+    const reference = Array.prototype.find.call(dom.yearSelect.options, function (item) {
+      return Number(item.value) > year;
+    });
+    dom.yearSelect.add(option, reference || null);
+  }
+
+  function summarizeMonth(year, month) {
+    const safeYear = sanitizeYear(year);
+    const safeMonth = sanitizeMonth(month);
+    const key = getMonthKeyFor(safeYear, safeMonth);
+    const raw = state.months[key];
+    const rows = raw && Array.isArray(raw.rows) ? raw.rows.map(normalizeRow) : [];
+    const holidays = normalizeHolidays(raw && raw.holidays);
+    const days = getDaysInMonth(safeYear, safeMonth);
+    const result = {
+      year: safeYear,
+      month: safeMonth,
+      key: key,
+      rowCount: rows.length,
+      employeeCount: 0,
+      filledCells: 0,
+      hasData: false,
+      overtimeDays: 0,
+      overtimeHours: 0,
+      otNightHours: 0,
+      otHolidayHours: 0,
+      nightHours: 0,
+      holidayCount: holidays.length,
+      holidays: holidays
+    };
+    rows.forEach(function (row) {
+      let rowFilled = 0;
+      for (let day = 1; day <= days; day += 1) {
+        const code = normalizeCellValue(row.shifts[String(day)]);
+        if (code) {
+          rowFilled += 1;
+          const definition = SHIFT_CODE_MAP[code];
+          if (definition) {
+            result.nightHours += Number(definition.nightHours || 0);
+          }
+        }
+      }
+      if (rowFilled > 0) {
+        result.employeeCount += 1;
+      }
+      result.filledCells += rowFilled;
+      Object.keys(row.overtime).forEach(function (day) {
+        const entry = row.overtime[day];
+        const hours = Number(entry.hours) || 0;
+        if (!hours) {
+          return;
+        }
+        result.overtimeDays += 1;
+        result.overtimeHours += hours;
+        if (entry.type === "night" || entry.type === "holidayNight") {
+          result.otNightHours += hours;
+        }
+        if (entry.type === "holiday" || entry.type === "holidayNight") {
+          result.otHolidayHours += hours;
+        }
+      });
+    });
+    result.hasData = result.filledCells > 0;
+    result.overtimeHours = Math.round(result.overtimeHours * 2) / 2;
+    result.otNightHours = Math.round(result.otNightHours * 2) / 2;
+    result.otHolidayHours = Math.round(result.otHolidayHours * 2) / 2;
+    return result;
+  }
+
+  function notifyMonthOpen(year, month) {
+    monthOpenSubscribers.forEach(function (callback) {
+      try {
+        callback({ year: year, month: month });
+      } catch (error) {}
+    });
+  }
+
+  window.YiDingScheduleView = {
+    openMonth: function (year, month) {
+      const safeYear = sanitizeYear(year);
+      const safeMonth = sanitizeMonth(month);
+      ensureYearOption(safeYear);
+      handlePeriodChange(safeYear, safeMonth);
+      notifyMonthOpen(safeYear, safeMonth);
+      return { year: safeYear, month: safeMonth };
+    },
+    getSelected: function () {
+      return { year: state.selectedYear, month: state.selectedMonth };
+    },
+    getMonthOverview: function (year, month) {
+      return summarizeMonth(year, month);
+    },
+    getYearOverview: function (year) {
+      const overview = [];
+      for (let month = 1; month <= 12; month += 1) {
+        overview.push(summarizeMonth(year, month));
+      }
+      return overview;
+    },
+    onMonthOpen: function (callback) {
+      if (typeof callback === "function") {
+        monthOpenSubscribers.push(callback);
+      }
+      return function () {
+        const index = monthOpenSubscribers.indexOf(callback);
+        if (index >= 0) {
+          monthOpenSubscribers.splice(index, 1);
+        }
+      };
+    }
+  };
 })();
