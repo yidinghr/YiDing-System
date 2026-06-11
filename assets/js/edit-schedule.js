@@ -221,6 +221,7 @@
     editButton: document.getElementById("scheduleEditButton"),
     saveButton: document.getElementById("scheduleSaveButton"),
     exportButton: document.getElementById("scheduleExportButton"),
+    exportYearButton: document.getElementById("scheduleExportYearButton"),
     legendTitle: document.querySelector(".schedule-legend__title"),
     legendListToggle: document.getElementById("scheduleLegendListToggle"),
     calendarToggle: document.getElementById("scheduleCalendarToggle"),
@@ -908,6 +909,11 @@
       dom.exportButton.setAttribute("aria-label", "Export Excel");
       dom.exportButton.hidden = !uiState.exportReady;
     }
+    if (dom.exportYearButton) {
+      dom.exportYearButton.textContent = "EXCEL NĂM";
+      dom.exportYearButton.setAttribute("aria-label", "Export full-year Excel");
+      dom.exportYearButton.hidden = !uiState.exportReady;
+    }
     if (dom.selectionInput) {
       dom.selectionInput.disabled = Boolean(uiState.scheduleLocked);
     }
@@ -1290,6 +1296,9 @@
     if (dom.exportButton) {
       dom.exportButton.addEventListener("click", exportCurrentMonthExcel);
     }
+    if (dom.exportYearButton) {
+      dom.exportYearButton.addEventListener("click", exportFullYearExcel);
+    }
     if (dom.modeShift) {
       dom.modeShift.addEventListener("click", function () { setInputMode("shift"); });
     }
@@ -1664,566 +1673,28 @@
     if (!uiState.exportReady) {
       return;
     }
-    const workbookXml = buildCurrentMonthExcelWorkbookXml();
-    const blob = new Blob(["\ufeff", workbookXml], { type: "application/vnd.ms-excel;charset=utf-8" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.href = url;
-    link.download = "schedule_" + state.selectedYear + "_" + String(state.selectedMonth).padStart(2, "0") + ".xls";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(function () {
-      URL.revokeObjectURL(url);
-    }, 1000);
-    showFeedback("Excel file exported.", "success");
-  }
-
-  function buildCurrentMonthExcelWorkbookXml() {
-    const monthState = ensureCurrentMonthState();
-    const scheduleLastRow = Math.max(60, 4 + monthState.rows.length);
-    const bottomStartRow = scheduleLastRow + 2;
-    const bottomLastRow = bottomStartRow + SHIFT_CODE_DEFINITIONS.length - 1;
-    return [
-      '<?xml version="1.0" encoding="UTF-8"?>',
-      '<?mso-application progid="Excel.Sheet"?>',
-      '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ',
-      'xmlns:o="urn:schemas-microsoft-com:office:office" ',
-      'xmlns:x="urn:schemas-microsoft-com:office:excel" ',
-      'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" ',
-      'xmlns:html="http://www.w3.org/TR/REC-html40">',
-      '<DocumentProperties xmlns="urn:schemas-microsoft-com:office:office"><Author>YiDing</Author></DocumentProperties>',
-      buildExcelXmlStyles(),
-      buildScheduleWorksheetXml(monthState.rows, scheduleLastRow, bottomStartRow, bottomLastRow),
-      buildShiftDefinitionsWorksheetXml(),
-      '</Workbook>'
-    ].join("");
-  }
-
-  function buildExcelXmlStyles() {
-    return [
-      '<Styles>',
-      '<Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="10"/></Style>',
-      buildExcelXmlStyle("sGrid", null, null),
-      buildExcelXmlStyle("sLabel", "#DDEBF7", null),
-      buildExcelXmlStyle("sTitle", "#FFF2CC", null),
-      buildExcelXmlStyle("sDay", "#9FD0FF", 'd'),
-      buildExcelXmlStyle("sWeekend", "#FF1F1F", 'd'),
-      buildExcelXmlStyle("sWeekday", "#9FD0FF", null),
-      buildExcelXmlStyle("sWeekendText", "#FF1F1F", null),
-      buildExcelXmlStyle("sCodeA", "#FFF36D", null),
-      buildExcelXmlStyle("sCodeB", "#F4B6CB", null),
-      buildExcelXmlStyle("sCodeC", "#C9B6E8", null),
-      buildExcelXmlStyle("sCodeLeave", "#FF5A5A", null),
-      buildExcelXmlStyle("sCodeOff", "#FF1F1F", null),
-      buildExcelXmlStyle("sCodeOther", "#F7D7A7", null),
-      buildExcelXmlStyle("sSummary", null, null),
-      buildExcelXmlStyle("sDaily", "#93D18B", null),
-      buildExcelXmlStyle("sHidden", null, null),
-      '</Styles>'
-    ].join("");
-  }
-
-  function buildExcelXmlStyle(id, fillColor, numberFormat) {
-    return [
-      '<Style ss:ID="' + id + '">',
-      '<Alignment ss:Horizontal="Center" ss:Vertical="Center"/>',
-      '<Font ss:FontName="Arial" ss:Size="10" ss:Bold="1"/>',
-      '<Borders>',
-      '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>',
-      '<Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>',
-      '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>',
-      '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>',
-      '</Borders>',
-      fillColor ? '<Interior ss:Color="' + fillColor + '" ss:Pattern="Solid"/>' : '',
-      numberFormat ? '<NumberFormat ss:Format="' + numberFormat + '"/>' : '',
-      '</Style>'
-    ].join("");
-  }
-
-  function buildScheduleWorksheetXml(rows, scheduleLastRow, bottomStartRow, bottomLastRow) {
-    const rowXml = [];
-    for (let rowIndex = 1; rowIndex <= bottomLastRow; rowIndex += 1) {
-      const cells = buildScheduleWorksheetRowCells(rowIndex, rows, scheduleLastRow, bottomStartRow);
-      if (cells.length) {
-        rowXml.push(excelXmlRow(rowIndex, cells));
-      }
-    }
-    return [
-      '<Worksheet ss:Name="Sheet1">',
-      '<Table ss:ExpandedColumnCount="84" ss:ExpandedRowCount="' + bottomLastRow + '" x:FullColumns="1" x:FullRows="1">',
-      buildScheduleWorksheetColumnsXml(),
-      rowXml.join(""),
-      '</Table>',
-      buildScheduleWorksheetOptionsXml(),
-      '</Worksheet>'
-    ].join("");
-  }
-
-  function buildScheduleWorksheetColumnsXml() {
-    return [
-      '<Column ss:AutoFitWidth="0" ss:Width="73"/>',
-      '<Column ss:AutoFitWidth="0" ss:Width="180"/>',
-      '<Column ss:AutoFitWidth="0" ss:Width="218"/>',
-      '<Column ss:AutoFitWidth="0" ss:Width="94"/>',
-      '<Column ss:AutoFitWidth="0" ss:Width="113"/>',
-      '<Column ss:Index="6" ss:AutoFitWidth="0" ss:Span="30" ss:Width="41"/>',
-      '<Column ss:Index="37" ss:AutoFitWidth="0" ss:Width="42"/>',
-      '<Column ss:Index="38" ss:AutoFitWidth="0" ss:Span="8" ss:Width="41"/>',
-      '<Column ss:Index="47" ss:AutoFitWidth="0" ss:Span="4" ss:Width="41"/>',
-      '<Column ss:Index="52" ss:AutoFitWidth="0" ss:Width="42"/>',
-      '<Column ss:Index="53" ss:AutoFitWidth="0" ss:Width="70"/>',
-      '<Column ss:Index="54" ss:AutoFitWidth="0" ss:Width="70"/>',
-      '<Column ss:Index="55" ss:AutoFitWidth="0" ss:Width="90"/>',
-      '<Column ss:Index="56" ss:AutoFitWidth="0" ss:Width="80"/>',
-      '<Column ss:Index="57" ss:AutoFitWidth="0" ss:Width="90"/>',
-      '<Column ss:Index="74" ss:Hidden="1" ss:AutoFitWidth="0" ss:Span="10" ss:Width="0"/>'
-    ].join("");
-  }
-
-  function buildScheduleWorksheetOptionsXml() {
-    return [
-      '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">',
-      '<FreezePanes/>',
-      '<FrozenNoSplit/>',
-      '<SplitHorizontal>3</SplitHorizontal>',
-      '<TopRowBottomPane>3</TopRowBottomPane>',
-      '<SplitVertical>5</SplitVertical>',
-      '<LeftColumnRightPane>5</LeftColumnRightPane>',
-      '<ActivePane>0</ActivePane>',
-      '<ProtectObjects>False</ProtectObjects>',
-      '<ProtectScenarios>False</ProtectScenarios>',
-      '</WorksheetOptions>'
-    ].join("");
-  }
-
-  function buildScheduleWorksheetRowCells(rowIndex, rows, scheduleLastRow, bottomStartRow) {
-    const cells = [];
-    const days = getDaysInMonth(state.selectedYear, state.selectedMonth);
-    const summaryColumns = getExcelSummaryColumns(rows);
-    if (rowIndex === 1) {
-      cells.push(excelXmlCell(2, "\u5e74", "sLabel"));
-      cells.push(excelXmlCell(3, state.selectedYear, "sTitle", "Number"));
-      cells.push(excelXmlCell(4, "\u6708", "sLabel"));
-      cells.push(excelXmlCell(5, state.selectedMonth, "sTitle", "Number"));
-      cells.push(excelXmlCell(84, days, "sHidden", "Number", '=DAY(EOMONTH(DATE($C$1,$E$1,1),0))'));
-    }
-    if (rowIndex === 3) {
-      for (let colIndex = 6; colIndex <= 36; colIndex += 1) {
-        const day = colIndex - 5;
-        const style = isExcelWeekendColumn(colIndex) ? "sWeekend" : "sDay";
-        const value = day <= days ? excelXmlDateValue(state.selectedYear, state.selectedMonth, day) : "";
-        cells.push(excelXmlCell(colIndex, value, style, "DateTime", '=IF(COLUMN()-COLUMN($F$3)+1<=$CF$1,DATE($C$1,$E$1,COLUMN()-COLUMN($F$3)+1),"")'));
-      }
-      addFixedSummaryTimeCells(cells);
-    }
-    if (rowIndex === 4) {
-      const metaLabels = META_HEADERS[i18n.getLocale()] || META_HEADERS.en;
-      metaLabels.forEach(function (label, index) {
-        cells.push(excelXmlCell(index + 1, label, "sGrid"));
-      });
-      for (let colIndex = 6; colIndex <= 36; colIndex += 1) {
-        const day = colIndex - 5;
-        const style = isExcelWeekendColumn(colIndex) ? "sWeekendText" : "sWeekday";
-        const value = day <= days ? getExcelWeekdayLabel(day) : "";
-        cells.push(excelXmlCell(colIndex, value, style, "String"));
-      }
-      addFixedSummaryHeaderCells(cells);
-    }
-    if (rowIndex === bottomStartRow - 1) {
-      cells.push(excelXmlCell(5, i18n.t("schedule.dailyCode"), "sGrid"));
-      for (let colIndex = 6; colIndex <= 36; colIndex += 1) {
-        const day = colIndex - 5;
-        if (day <= days) {
-          const style = isExcelWeekendColumn(colIndex) ? "sWeekend" : "sDay";
-          cells.push(excelXmlCell(colIndex, day, style, "Number"));
-        }
-      }
-    }
-    if (rowIndex >= 5 && rowIndex <= scheduleLastRow) {
-      addScheduleDataCells(cells, rows[rowIndex - 5], rowIndex, days);
-      addFixedSummaryFormulaCells(cells, rows[rowIndex - 5], rowIndex);
-    }
-    if (rowIndex >= bottomStartRow && rowIndex < bottomStartRow + SHIFT_CODE_DEFINITIONS.length) {
-      addDailySummaryFormulaCells(cells, rows, rowIndex, scheduleLastRow, bottomStartRow);
-    }
-    addShiftOrderHelperCells(cells, rows, rowIndex, scheduleLastRow);
-    return cells.sort(function (a, b) {
-      return a.index - b.index;
-    });
-  }
-
-  function addScheduleDataCells(cells, row, rowIndex, days) {
-    META_COLUMNS.forEach(function (column, index) {
-      const value = row && row.employeeSnapshot ? row.employeeSnapshot[column.key] : "";
-      cells.push(excelXmlCell(index + 1, value || "", "sGrid"));
-    });
-    for (let day = 1; day <= 31; day += 1) {
-      const colIndex = day + 5;
-      const code = row && day <= days ? normalizeCellValue(row.shifts[String(day)]) : "";
-      cells.push(excelXmlCell(colIndex, code, getExcelXmlCodeStyle(code)));
-    }
-  }
-
-  // Fixed summary columns matching real Excel (col 37-57)
-  var FIXED_SUMMARY_COLS = [
-    { col: 37, code: "_TOTAL",      label: "TL",              time: null },
-    { col: 38, code: "A",           label: "A",               time: "7-15" },
-    { col: 39, code: "B",           label: "B",               time: "15-23" },
-    { col: 40, code: "C",           label: "C",               time: "23-7" },
-    { col: 41, code: "A3",          label: "A3",              time: "10-18" },
-    { col: 42, code: "A4",          label: "A4",              time: "11-19" },
-    { col: 43, code: "A5",          label: "A5",              time: "12-20" },
-    { col: 44, code: "B2",          label: "B2",              time: "17-1" },
-    { col: 45, code: "B4",          label: "B4",              time: "19-3" },
-    { col: 46, code: "B6",          label: "B6",              time: "21-5" },
-    { col: 47, code: "OFF",         label: "OFF",             time: null },
-    { col: 48, code: "PH",          label: "PH",              time: null },
-    { col: 49, code: "TL",          label: "TL",              time: null },
-    { col: 50, code: "AL",          label: "AL",              time: null },
-    { col: 51, code: "BL",          label: "BL",              time: null },
-    { col: 52, code: "_OT",         label: "\u52a0\u73ed",              time: null },
-    { col: 53, code: "_REQ",        label: "\u5e94\u4e0a\u65f6\u6570",       time: null },
-    { col: 54, code: "_ACT",        label: "\u5b9e\u9645\u65f6\u6570",       time: null },
-    { col: 55, code: "_NIGHT",      label: "\u591c\u73ed\u8865\u8d34(\u65f6\u6570)", time: null },
-    { col: 56, code: "_NIGHTOT",    label: "\u591c\u73edOT\u8865\u8d34",     time: null },
-    { col: 57, code: "_NIGHTTOTAL", label: "\u591c\u73ed\u8865\u8d34\u5408\u8ba1",   time: null }
-  ];
-
-  function addFixedSummaryTimeCells(cells) {
-    FIXED_SUMMARY_COLS.forEach(function (col) {
-      if (col.time) {
-        cells.push(excelXmlCell(col.col, col.time, "sSummary", "String"));
-      }
-    });
-  }
-
-  function addFixedSummaryHeaderCells(cells) {
-    FIXED_SUMMARY_COLS.forEach(function (col) {
-      cells.push(excelXmlCell(col.col, col.label, "sSummary", "String"));
-    });
-  }
-
-  function addFixedSummaryFormulaCells(cells, row, rowIndex) {
-    var rowRange = '$F' + rowIndex + ':INDEX($F' + rowIndex + ':$AJ' + rowIndex + ',$CF$1)';
-    var summary = getExcelRowSummaryValue(row);
-    FIXED_SUMMARY_COLS.forEach(function (col) {
-      var formula, value;
-      if (col.code === "_TOTAL") {
-        value = (row && hasExcelShiftValue(row)) ? getExcelRowTotalCount(row) : "";
-        formula = '=IF(COUNTA(' + rowRange + ')=0,"",COUNTA(' + rowRange + '))';
-      } else if (col.code === "_OT") {
-        value = summary.overtimeCount;
-        formula = '=IF(COUNTA(' + rowRange + ')=0,"",COUNTIF(' + rowRange + ',"\u52a0"))';
-      } else if (col.code === "_REQ") {
-        value = summary.requiredHours;
-        formula = '=IF(COUNTA(' + rowRange + ')=0,"",($CF$1-4)*8)';
-      } else if (col.code === "_ACT") {
-        value = summary.actualHours;
-        formula = '=IF(COUNTA(' + rowRange + ')=0,"",SUMPRODUCT(COUNTIF(' + rowRange + ',Sheet2!$A$2:$A$32),Sheet2!$D$2:$D$32))';
-      } else if (col.code === "_NIGHT") {
-        value = summary.nightHours;
-        formula = '=IF(COUNTA(' + rowRange + ')=0,"",SUMPRODUCT(COUNTIF(' + rowRange + ',Sheet2!$A$2:$A$32),Sheet2!$E$2:$E$32))';
-      } else if (col.code === "_NIGHTOT") {
-        value = "";
-        formula = '=IF(COUNTA(' + rowRange + ')=0,"",0)';
-      } else if (col.code === "_NIGHTTOTAL") {
-        value = summary.nightHours;
-        var nightCol = excelColName(55);
-        var nightOtCol = excelColName(56);
-        formula = '=IF(COUNTA(' + rowRange + ')=0,"",' + nightCol + rowIndex + '+' + nightOtCol + rowIndex + ')';
-      } else {
-        // Regular shift code COUNTIF
-        value = (row && hasExcelShiftValue(row)) ? getExcelRowShiftCount(row, col.code) : "";
-        formula = '=IF(COUNTA(' + rowRange + ')=0,"",COUNTIF(' + rowRange + ',"' + col.code + '"))';
-      }
-      cells.push(excelXmlCell(col.col, value, "sSummary", typeof value === "number" ? "Number" : "String", formula));
-    });
-  }
-
-  function addDailySummaryFormulaCells(cells, rows, rowIndex, scheduleLastRow, bottomStartRow) {
-    const activeCodes = getExcelActiveSummaryCodes(rows);
-    const code = activeCodes[rowIndex - bottomStartRow] || "";
-    cells.push(excelXmlCell(5, code, "sSummary", "String"));
-    for (let colIndex = 6; colIndex <= 36; colIndex += 1) {
-      const day = colIndex - 5;
-      const colName = excelColName(colIndex);
-      const value = code && day <= getDaysInMonth(state.selectedYear, state.selectedMonth)
-        ? getDailyCount(rows, code, day)
-        : "";
-      cells.push(excelXmlCell(colIndex, value, "sDaily", "Number", '=IF(OR($E' + rowIndex + '="",' + colName + '$3=""),"",COUNTIF(' + colName + '$5:' + colName + '$' + scheduleLastRow + ',$E' + rowIndex + '))'));
-    }
-  }
-
-  function addShiftOrderHelperCells(cells, rows, rowIndex, scheduleLastRow) {
-    if (rowIndex < 2 || rowIndex > 32) {
+    const excel = window.YiDingScheduleExcel;
+    if (!excel || !excel.exportMonth) {
+      showFeedback("Excel module not loaded.", "error");
       return;
     }
-    const sheet2Row = getExcelShiftOrderSheet2Row(rowIndex);
-    const code = getExcelShiftCodeBySheet2Row(sheet2Row);
-    const count = getExcelShiftCount(rows, code);
-    const rank = count > 0 ? getExcelPositiveShiftRank(rows, rowIndex) : "";
-    cells.push(excelXmlCell(74, code, "sHidden", "String", '=Sheet2!A' + sheet2Row));
-    cells.push(excelXmlCell(75, count, "sHidden", "Number", '=COUNTIF($F$5:INDEX($F$5:$AJ$' + scheduleLastRow + ',ROWS($F$5:$AJ$' + scheduleLastRow + '),$CF$1),BV' + rowIndex + ')'));
-    cells.push(excelXmlCell(76, rank, "sHidden", "Number", '=IF(BW' + rowIndex + '>0,COUNTIF($BW$2:BW' + rowIndex + ',">0"),"")'));
-    cells.push(excelXmlCell(77, code, "sHidden", "String", '=Sheet2!A' + sheet2Row));
-    cells.push(excelXmlCell(78, count, "sHidden", "Number", '=COUNTIF($F$5:INDEX($F$5:$AJ$' + scheduleLastRow + ',ROWS($F$5:$AJ$' + scheduleLastRow + '),$CF$1),BY' + rowIndex + ')'));
-    cells.push(excelXmlCell(79, rank, "sHidden", "Number", '=IF(BZ' + rowIndex + '>0,COUNTIF($BZ$2:BZ' + rowIndex + ',">0"),"")'));
+    if (excel.exportMonth(state.selectedYear, state.selectedMonth)) {
+      showFeedback("Excel file exported.", "success");
+    }
   }
 
-  function getExcelShiftOrderSheet2Row(rowIndex) {
-    const order = [2, 10, 18, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
-    return order[rowIndex - 2] || rowIndex;
-  }
-
-  function getExcelShiftCodeBySheet2Row(sheet2Row) {
-    const definition = SHIFT_CODE_DEFINITIONS[sheet2Row - 2];
-    return definition ? definition.code : "";
-  }
-
-  function getExcelShiftOrderCodes() {
-    const codes = [];
-    for (let rowIndex = 2; rowIndex <= 32; rowIndex += 1) {
-      const code = getExcelShiftCodeBySheet2Row(getExcelShiftOrderSheet2Row(rowIndex));
-      if (code) {
-        codes.push(code);
-      }
+  function exportFullYearExcel() {
+    if (!uiState.exportReady) {
+      return;
     }
-    return codes;
-  }
-
-  function getExcelActiveSummaryCodes(rows) {
-    return getExcelShiftOrderCodes().filter(function (code) {
-      return getExcelShiftCount(rows, code) > 0;
-    });
-  }
-
-  function getExcelSummaryColumns(rows) {
-    return getExcelActiveSummaryCodes(rows).concat([
-      "\u52a0\u73ed",
-      "\u5e94\u4e0a\u65f6\u6570",
-      "\u5b9e\u9645\u65f6\u6570",
-      "\u591c\u73ed\u8865\u8d34(\u65f6\u6570)"
-    ]);
-  }
-
-  function getExcelShiftCount(rows, code) {
-    if (!code) {
-      return 0;
+    const excel = window.YiDingScheduleExcel;
+    if (!excel || !excel.exportYear) {
+      showFeedback("Excel module not loaded.", "error");
+      return;
     }
-    const days = getDaysInMonth(state.selectedYear, state.selectedMonth);
-    return rows.reduce(function (total, row) {
-      for (let day = 1; day <= days; day += 1) {
-        if (normalizeCellValue(row.shifts[String(day)]) === code) {
-          total += 1;
-        }
-      }
-      return total;
-    }, 0);
-  }
-
-  function getExcelPositiveShiftRank(rows, rowIndex) {
-    let rank = 0;
-    for (let currentRowIndex = 2; currentRowIndex <= rowIndex; currentRowIndex += 1) {
-      const code = getExcelShiftCodeBySheet2Row(getExcelShiftOrderSheet2Row(currentRowIndex));
-      if (getExcelShiftCount(rows, code) > 0) {
-        rank += 1;
-      }
+    if (excel.exportYear(state.selectedYear)) {
+      showFeedback(i18n.getLocale() === "vi" ? ("Đã xuất Excel cả năm " + state.selectedYear + ".") : "Full-year Excel exported.", "success");
     }
-    return rank;
-  }
-
-  function getExcelSummaryTimeValue(label) {
-    const definition = SHIFT_CODE_MAP[label];
-    if (!definition || !isFinite(Number(definition.checkIn)) || !isFinite(Number(definition.checkOut))) {
-      return "";
-    }
-    return String(definition.checkIn) + "-" + String(definition.checkOut);
-  }
-
-  function getExcelSummaryCellValue(row, label, rowSummary) {
-    if (!row || !label || !hasExcelShiftValue(row)) {
-      return "";
-    }
-    if (label === "\u52a0\u73ed") {
-      return rowSummary.overtimeCount;
-    }
-    if (label === "\u5e94\u4e0a\u65f6\u6570") {
-      return rowSummary.requiredHours;
-    }
-    if (label === "\u5b9e\u9645\u65f6\u6570") {
-      return rowSummary.actualHours;
-    }
-    if (label === "\u591c\u73ed\u8865\u8d34(\u65f6\u6570)") {
-      return rowSummary.nightHours;
-    }
-    return getExcelRowShiftCount(row, label);
-  }
-
-  function getExcelRowSummaryValue(row) {
-    if (!row || !hasExcelShiftValue(row)) {
-      return {
-        overtimeCount: "",
-        requiredHours: "",
-        actualHours: "",
-        nightHours: ""
-      };
-    }
-    return getRowSummary(row);
-  }
-
-  function getExcelRowShiftCount(row, code) {
-    const days = getDaysInMonth(state.selectedYear, state.selectedMonth);
-    let count = 0;
-    for (let day = 1; day <= days; day += 1) {
-      if (normalizeCellValue(row.shifts[String(day)]) === code) {
-        count += 1;
-      }
-    }
-    return count;
-  }
-
-  function hasExcelShiftValue(row) {
-    if (!row || !row.shifts) {
-      return false;
-    }
-    const days = getDaysInMonth(state.selectedYear, state.selectedMonth);
-    for (let day = 1; day <= days; day += 1) {
-      if (normalizeCellValue(row.shifts[String(day)])) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  function getExcelRowTotalCount(row) {
-    if (!row || !row.shifts) { return ""; }
-    const days = getDaysInMonth(state.selectedYear, state.selectedMonth);
-    let count = 0;
-    for (let day = 1; day <= days; day += 1) {
-      if (normalizeCellValue(row.shifts[String(day)])) { count += 1; }
-    }
-    return count || "";
-  }
-
-  function getExcelWeekdayLabel(day) {
-    return ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][new Date(state.selectedYear, state.selectedMonth - 1, day).getDay()];
-  }
-
-  function excelXmlDateValue(year, month, day) {
-    return String(year) + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0") + "T00:00:00.000";
-  }
-
-  function buildShiftDefinitionsWorksheetXml() {
-    const rows = [
-      excelXmlRow(1, [
-        excelXmlCell(1, "SHIFT CODE", "sLabel"),
-        excelXmlCell(2, "CHECK IN TIME", "sLabel"),
-        excelXmlCell(3, "CHECK OUT TIME", "sLabel"),
-        excelXmlCell(4, "PAY HOURS", "sLabel"),
-        excelXmlCell(5, "NIGHT SHIFT HOURS", "sLabel"),
-        excelXmlCell(6, "REMARK", "sLabel")
-      ])
-    ];
-    SHIFT_CODE_DEFINITIONS.forEach(function (item, index) {
-      rows.push(excelXmlRow(index + 2, [
-        excelXmlCell(1, item.code, "sGrid"),
-        excelXmlCell(2, item.checkIn, "sGrid", getExcelXmlCellType(item.checkIn)),
-        excelXmlCell(3, item.checkOut, "sGrid", getExcelXmlCellType(item.checkOut)),
-        excelXmlCell(4, item.hoursPay, "sGrid", "Number"),
-        excelXmlCell(5, item.nightHours, "sGrid", "Number"),
-        excelXmlCell(6, getLegendRemark(item.code), "sGrid")
-      ]));
-    });
-    return [
-      '<Worksheet ss:Name="Sheet2">',
-      '<Table ss:ExpandedColumnCount="6" ss:ExpandedRowCount="' + (SHIFT_CODE_DEFINITIONS.length + 1) + '" x:FullColumns="1" x:FullRows="1">',
-      '<Column ss:AutoFitWidth="0" ss:Width="90"/>',
-      '<Column ss:AutoFitWidth="0" ss:Width="110"/>',
-      '<Column ss:AutoFitWidth="0" ss:Width="120"/>',
-      '<Column ss:AutoFitWidth="0" ss:Width="90"/>',
-      '<Column ss:AutoFitWidth="0" ss:Width="130"/>',
-      '<Column ss:AutoFitWidth="0" ss:Width="220"/>',
-      rows.join(""),
-      '</Table>',
-      '</Worksheet>'
-    ].join("");
-  }
-
-  function buildWeekdayFormula(colName) {
-    return '=IF(' + colName + '$3="","",CHOOSE(WEEKDAY(' + colName + '$3),"SUN","MON","TUE","WED","THU","FRI","SAT"))';
-  }
-
-  function isExcelWeekendColumn(colIndex) {
-    const day = colIndex - 5;
-    const weekday = new Date(state.selectedYear, state.selectedMonth - 1, day).getDay();
-    return weekday === 0 || weekday === 6;
-  }
-
-  function getExcelXmlCodeStyle(code) {
-    if (!code) {
-      return "sGrid";
-    }
-    const group = getCodeGroup(code);
-    if (group === "A") {
-      return "sCodeA";
-    }
-    if (group === "B") {
-      return "sCodeB";
-    }
-    if (group === "C") {
-      return "sCodeC";
-    }
-    if (group === "leave") {
-      return "sCodeLeave";
-    }
-    if (group === "off") {
-      return "sCodeOff";
-    }
-    return "sCodeOther";
-  }
-
-  function excelXmlRow(index, cells) {
-    return '<Row ss:Index="' + index + '" ss:AutoFitHeight="0" ss:Height="18">' + cells.map(function (cell) {
-      return cell.xml;
-    }).join("") + '</Row>';
-  }
-
-  function excelXmlCell(index, value, styleId, type, formula) {
-    const cellType = type || getExcelXmlCellType(value);
-    const attributes = [
-      'ss:Index="' + index + '"',
-      styleId ? 'ss:StyleID="' + styleId + '"' : '',
-      formula ? 'ss:Formula="' + escapeXml(formula) + '"' : ''
-    ].filter(Boolean).join(" ");
-    const data = value !== "" && value !== undefined && value !== null
-      ? '<Data ss:Type="' + cellType + '">' + escapeXml(value === undefined || value === null ? "" : value) + '</Data>'
-      : '';
-    return {
-      index: index,
-      xml: '<Cell ' + attributes + '>' + data + '</Cell>'
-    };
-  }
-
-  function getExcelXmlCellType(value) {
-    if (typeof value === "number") {
-      return "Number";
-    }
-    if (typeof value === "string" && value !== "" && /^-?\d+(?:\.\d+)?$/.test(value)) {
-      return "Number";
-    }
-    return "String";
-  }
-
-  function excelColName(index) {
-    let colName = "";
-    let value = index;
-    while (value > 0) {
-      const remainder = (value - 1) % 26;
-      colName = String.fromCharCode(65 + remainder) + colName;
-      value = Math.floor((value - 1) / 26);
-    }
-    return colName;
   }
 
   function handleCellPointerStart(event) {
@@ -3832,15 +3303,6 @@
       .replace(/'/g, "&#39;");
   }
 
-  function escapeXml(value) {
-    return String(value === undefined || value === null ? "" : value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&apos;");
-  }
-
   // --- Public bridge for the Zodiac Galaxy Gate (and other external modules) ---
   // Keeps the grid logic inside this IIFE; exposes only safe, read-mostly hooks.
   const monthOpenSubscribers = [];
@@ -3956,6 +3418,34 @@
         overview.push(summarizeMonth(year, month));
       }
       return overview;
+    },
+    // Snapshot of everything the Excel export module needs for one month —
+    // export code never touches this IIFE's live state.
+    getExportContext: function (year, month) {
+      const safeYear = sanitizeYear(year);
+      const safeMonth = sanitizeMonth(month);
+      const raw = state.months[getMonthKeyFor(safeYear, safeMonth)];
+      const legendRemarksByCode = {};
+      const codeLabelsByCode = {};
+      VALID_SHIFT_CODES.forEach(function (code) {
+        legendRemarksByCode[code] = getLegendRemark(code);
+        codeLabelsByCode[code] = getLegendCodeLabel(code);
+      });
+      return {
+        year: safeYear,
+        month: safeMonth,
+        days: getDaysInMonth(safeYear, safeMonth),
+        rows: raw && Array.isArray(raw.rows) ? raw.rows.map(normalizeRow) : [],
+        holidays: normalizeHolidays(raw && raw.holidays),
+        metaHeaders: META_HEADERS[i18n.getLocale()] || META_HEADERS["zh-Hant"],
+        metaKeys: META_COLUMNS.map(function (column) { return column.key; }),
+        dailyCodeLabel: i18n.t("schedule.dailyCode"),
+        shiftDefs: SHIFT_CODE_DEFINITIONS,
+        shiftColors: SHIFT_CODE_COLORS,
+        legendRemarks: legendRemarksByCode,
+        codeLabels: codeLabelsByCode,
+        otMultiplier: OVERTIME_PAY_MULTIPLIER
+      };
     },
     onMonthOpen: function (callback) {
       if (typeof callback === "function") {
